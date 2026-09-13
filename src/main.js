@@ -2252,11 +2252,12 @@ function renderMoldVisual(visual) {
   return `
     <div class="mold-visual" data-mold-visual style="--mold-width: ${visual.boxWidth}; --mold-depth: ${visual.boxDepth}; --mold-drop: ${visual.boxDrop};">
       <div class="mold-visual-stage">
-        <div class="mold-shape" aria-hidden="true">
-          <span class="mold-shadow"></span>
-          <span class="mold-tray"></span>
-          <span class="mold-cavity"></span>
-          <span class="mold-liquid"></span>
+        <div class="mold-box" aria-hidden="true">
+          <span class="mold-box-shadow"></span>
+          <span class="mold-box-face mold-box-top"></span>
+          <span class="mold-box-face mold-box-right"></span>
+          <span class="mold-box-face mold-box-front"></span>
+          <span class="mold-box-fill"></span>
         </div>
       </div>
       <div class="mold-dimensions">
@@ -2698,7 +2699,7 @@ function getMoldVisualState(lengthValue, widthValue, heightValue) {
   return {
     boxWidth: `${Math.round(76 + x * 88)}px`,
     boxDepth: `${Math.round(42 + y * 60)}px`,
-    boxDrop: `${Math.round(14 + z * 34)}px`,
+    boxDrop: `${Math.round(12 + z * 28)}px`,
     length: length > 0 ? `${formatQty(length)} см` : '0 см',
     width: width > 0 ? `${formatQty(width)} см` : '0 см',
     height: height > 0 ? `${formatQty(height)} см` : '0 см',

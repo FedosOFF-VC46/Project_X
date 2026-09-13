@@ -1338,77 +1338,81 @@ button svg {
   min-height: 108px;
 }
 
-.mold-shape {
+.mold-box {
   position: relative;
   width: var(--mold-width);
   min-width: 76px;
   height: var(--mold-depth);
   min-height: 42px;
-  transform: rotate(-10deg) skewX(-10deg);
+  transform: rotateX(58deg) rotateZ(-32deg);
+  transform-style: preserve-3d;
   transition: width 360ms cubic-bezier(.2, .9, .2, 1), height 360ms cubic-bezier(.2, .9, .2, 1), transform 360ms ease;
 }
 
-.mold-shadow,
-.mold-tray,
-.mold-cavity,
-.mold-liquid {
+.mold-box-shadow,
+.mold-box-face,
+.mold-box-fill {
   position: absolute;
   pointer-events: none;
 }
 
-.mold-shadow {
-  inset: 18% -4% -24% 4%;
+.mold-box-shadow {
+  inset: 12% -8% -42% -8%;
   border-radius: 999px;
   background: radial-gradient(ellipse, color-mix(in srgb, var(--green) 18%, transparent), transparent 70%);
-  filter: blur(10px);
+  filter: blur(12px);
+  transform: translateZ(-34px);
 }
 
-.mold-tray {
+.mold-box-face {
+  border: 1px solid color-mix(in srgb, var(--green) 82%, var(--white));
+  border-radius: 8px;
+}
+
+.mold-box-top {
   inset: 0;
-  border: 2px solid color-mix(in srgb, var(--green) 86%, var(--white));
-  border-radius: 999px;
   background:
-    radial-gradient(ellipse at 32% 34%, color-mix(in srgb, var(--green) 22%, transparent), transparent 48%),
-    color-mix(in srgb, var(--green) 6%, transparent);
+    linear-gradient(135deg, color-mix(in srgb, var(--green) 20%, transparent), transparent 48%),
+    color-mix(in srgb, var(--green) 8%, transparent);
   box-shadow:
-    0 var(--mold-drop) 0 color-mix(in srgb, var(--green) 15%, transparent),
-    0 calc(var(--mold-drop) + 8px) 26px color-mix(in srgb, var(--green) 10%, transparent);
+    inset 0 0 0 7px color-mix(in srgb, var(--panel) 66%, transparent),
+    0 18px 36px color-mix(in srgb, var(--green) 10%, transparent);
+  transform: translateZ(var(--mold-drop));
 }
 
-.mold-tray::after {
-  content: "";
-  position: absolute;
-  right: 8%;
-  bottom: calc(-1 * var(--mold-drop));
-  left: 8%;
+.mold-box-right {
+  top: 0;
+  right: 0;
+  width: var(--mold-drop);
+  height: 100%;
+  background: linear-gradient(90deg, color-mix(in srgb, var(--green) 13%, transparent), transparent);
+  transform: rotateY(90deg);
+  transform-origin: right;
+}
+
+.mold-box-front {
+  right: 0;
+  bottom: 0;
+  left: 0;
   height: var(--mold-drop);
-  border: 1px solid color-mix(in srgb, var(--green) 42%, transparent);
-  border-top: 0;
-  border-radius: 0 0 999px 999px;
-  background: linear-gradient(180deg, color-mix(in srgb, var(--green) 10%, transparent), transparent);
+  background: linear-gradient(180deg, color-mix(in srgb, var(--green) 15%, transparent), transparent);
+  transform: rotateX(-90deg);
+  transform-origin: bottom;
 }
 
-.mold-cavity {
-  inset: 18% 16%;
-  border: 1px solid color-mix(in srgb, var(--green) 68%, transparent);
-  border-radius: 999px;
+.mold-box-fill {
+  inset: 12px;
+  border: 1px solid color-mix(in srgb, var(--green) 48%, transparent);
+  border-radius: 6px;
   background:
-    radial-gradient(ellipse at 34% 40%, color-mix(in srgb, var(--green) 14%, transparent), transparent 58%),
-    color-mix(in srgb, var(--panel) 18%, transparent);
-  box-shadow: inset 0 0 0 6px color-mix(in srgb, var(--panel) 54%, transparent);
-}
-
-.mold-liquid {
-  inset: 27% 21%;
-  border-radius: 999px;
-  background:
-    linear-gradient(100deg, transparent 0%, color-mix(in srgb, var(--green) 38%, transparent) 50%, transparent 100%),
-    color-mix(in srgb, var(--green) 10%, transparent);
+    linear-gradient(90deg, transparent, color-mix(in srgb, var(--green) 34%, transparent), transparent),
+    color-mix(in srgb, var(--green) 8%, transparent);
   opacity: 0;
+  transform: translateZ(calc(var(--mold-drop) + 2px));
   transition: opacity 260ms ease;
 }
 
-.mold-visual.is-active .mold-liquid {
+.mold-visual.is-active .mold-box-fill {
   opacity: 1;
   animation: mold-fill-pulse 2.8s ease-in-out infinite;
 }
@@ -1453,10 +1457,10 @@ button svg {
 @keyframes mold-fill-pulse {
   0%,
   100% {
-    transform: translateX(-5%);
+    transform: translateZ(calc(var(--mold-drop) + 2px)) translateX(-5%);
   }
   50% {
-    transform: translateX(5%);
+    transform: translateZ(calc(var(--mold-drop) + 2px)) translateX(5%);
   }
 }
 
