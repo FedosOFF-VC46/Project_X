@@ -1044,13 +1044,15 @@ function renderMoldApplyPanel(product) {
         <p class="panel-kicker">Молд из смолы</p>
         <h4>Применить к изделию</h4>
       </div>
-      <label>
-        Сохраненный молд
-        <select name="mold_calculation_id" required>
-          ${molds.map((mold) => `<option value="${mold.id}">${escapeHtml(formatMoldOption(mold))}</option>`).join('')}
-        </select>
-      </label>
-      <button class="primary-button compact" type="submit">Применить</button>
+      <div class="mold-apply-controls">
+        <label>
+          Сохраненный молд
+          <select name="mold_calculation_id" required>
+            ${molds.map((mold) => `<option value="${mold.id}">${escapeHtml(formatMoldOption(mold))}</option>`).join('')}
+          </select>
+        </label>
+        <button class="primary-button compact" type="submit">Применить</button>
+      </div>
     </form>
   `;
 }
@@ -1121,11 +1123,11 @@ function renderRecipeTable(productId) {
               </div>
               <div class="recipe-row-facts">
                 <span>
-                  <small>Расход на 1 изделие</small>
+                  <small>Расход</small>
                   <strong>${formatQty(row.quantity_per_unit)} ${unit}</strong>
                 </span>
                 <span>
-                  <small>В себестоимости</small>
+                  <small>Сумма</small>
                   <strong>${formatCurrency(cost)}</strong>
                 </span>
               </div>

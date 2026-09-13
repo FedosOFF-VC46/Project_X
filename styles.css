@@ -1414,12 +1414,11 @@ button svg {
 
 .mold-apply-card {
   display: grid;
-  grid-template-columns: minmax(180px, 0.64fr) minmax(220px, 1fr) auto;
-  gap: 12px;
-  align-items: end;
+  grid-template-columns: 1fr;
+  gap: 14px;
   border: 1px solid var(--line);
   border-radius: 8px;
-  padding: 12px;
+  padding: 14px;
   background: var(--ghost);
 }
 
@@ -1431,6 +1430,27 @@ button svg {
 
 .mold-apply-card .panel-kicker {
   margin: 0;
+}
+
+.mold-apply-controls {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 132px;
+  gap: 10px;
+  align-items: end;
+}
+
+.mold-apply-controls label {
+  min-width: 0;
+}
+
+.mold-apply-controls select {
+  width: 100%;
+  min-width: 0;
+}
+
+.mold-apply-controls .primary-button {
+  min-height: 48px;
+  padding-inline: 16px;
 }
 
 .mold-apply-card > .ghost-button {
@@ -2228,7 +2248,7 @@ button svg {
 
 .recipe-row-card {
   display: grid;
-  grid-template-columns: minmax(150px, 0.9fr) minmax(0, 1.6fr) auto;
+  grid-template-columns: minmax(150px, 1fr) minmax(220px, 0.95fr) 38px;
   gap: 12px;
   align-items: center;
   border: 1px solid var(--line);
@@ -2266,7 +2286,7 @@ button svg {
 
 .recipe-row-facts {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(2, minmax(96px, 1fr));
   gap: 8px;
 }
 
@@ -2295,7 +2315,7 @@ button svg {
 
 .recipe-row-facts strong {
   color: var(--white);
-  font-size: 13px;
+  font-size: 14px;
   line-height: 1.1;
 }
 
@@ -3234,6 +3254,7 @@ button svg {
   .recipe-form,
   .recipe-composer,
   .mold-apply-card,
+  .mold-apply-controls,
   .mold-component-row,
   .production-material-card,
   .party-batch-card {
