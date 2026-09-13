@@ -37,6 +37,7 @@ const state = {
     editorOpen: false,
     editingMaterialId: null,
     duplicatingMaterialId: null,
+    confirmingDeleteMaterialId: null,
     productEditorOpen: false,
     editingProductId: null,
   },
@@ -178,7 +179,7 @@ async function loadWorkspace() {
     moldCalculations,
     moldCalculationItems,
   ] = await Promise.all([
-    supabase.from('materials').select('*').eq('user_id', userId).order('created_at', { ascending: false }),
+    supabase.from('materials').select('*').eq('user_id', userId).eq('is_active', true).order('created_at', { ascending: false }),
     supabase.from('products').select('*').eq('user_id', userId).order('created_at', { ascending: false }),
     supabase
       .from('product_materials')
@@ -1051,6 +1052,38 @@ function renderMaterialEditor() {
           }
           <button class="primary-button" type="submit">${isEdit ? 'Сохранить' : isDuplicate ? 'Создать копию' : 'Добавить товар'}</button>
         </form>
+        ${
+          isEdit
+            ? `
+              <div class="danger-zone">
+                ${
+                  state.inventory.confirmingDeleteMaterialId === material.id
+                    ? `
+                      <div class="danger-confirm">
+                        <div>
+                          <strong>Удалить со склада?</strong>
+                          <span>История операций останется в журнале</span>
+                        </div>
+                        <div class="danger-confirm-actions">
+                          <button class="ghost-button compact" data-action="cancel-delete-material" type="button">Отмена</button>
+                          <button class="danger-button" data-action="confirm-delete-material" data-material-id="${material.id}" type="button">
+                            <i data-lucide="trash-2"></i>
+                            Да, удалить
+                          </button>
+                        </div>
+                      </div>
+                    `
+                    : `
+                      <button class="danger-button" data-action="delete-material" data-material-id="${material.id}" type="button">
+                        <i data-lucide="trash-2"></i>
+                        Удалить материал
+                      </button>
+                    `
+                }
+              </div>
+            `
+            : ''
+        }
       </div>
     </section>
   `;
@@ -2524,6 +2557,7 @@ document.addEventListener('click', async (event) => {
     state.inventory.editorOpen = false;
     state.inventory.editingMaterialId = null;
     state.inventory.duplicatingMaterialId = null;
+    state.inventory.confirmingDeleteMaterialId = null;
     state.inventory.productEditorOpen = false;
     state.inventory.editingProductId = null;
     render();
@@ -2532,12 +2566,14 @@ document.addEventListener('click', async (event) => {
     state.inventory.editorOpen = true;
     state.inventory.editingMaterialId = null;
     state.inventory.duplicatingMaterialId = null;
+    state.inventory.confirmingDeleteMaterialId = null;
     render();
   }
   if (action === 'edit-material') {
     state.inventory.editorOpen = true;
     state.inventory.editingMaterialId = actionButton.dataset.materialId;
     state.inventory.duplicatingMaterialId = null;
+    state.inventory.confirmingDeleteMaterialId = null;
     render();
   }
   if (action === 'duplicate-material') {
@@ -2545,13 +2581,31 @@ document.addEventListener('click', async (event) => {
     state.inventory.editorOpen = true;
     state.inventory.editingMaterialId = null;
     state.inventory.duplicatingMaterialId = actionButton.dataset.materialId;
+    state.inventory.confirmingDeleteMaterialId = null;
     render();
   }
   if (action === 'close-material-editor') {
     state.inventory.editorOpen = false;
     state.inventory.editingMaterialId = null;
     state.inventory.duplicatingMaterialId = null;
+    state.inventory.confirmingDeleteMaterialId = null;
     render();
+  }
+  if (action === 'delete-material') {
+    state.inventory.confirmingDeleteMaterialId = actionButton.dataset.materialId;
+    render();
+  }
+  if (action === 'cancel-delete-material') {
+    state.inventory.confirmingDeleteMaterialId = null;
+    render();
+  }
+  if (action === 'confirm-delete-material') {
+    try {
+      await deleteMaterial(actionButton.dataset.materialId);
+    } catch (error) {
+      console.warn('Delete material failed:', error);
+      showToast(toUserMessage(error), 'error');
+    }
   }
   if (action === 'edit-product-stock') {
     state.inventory.productEditorOpen = true;
@@ -2741,6 +2795,7 @@ document.addEventListener('keydown', (event) => {
     state.inventory.editorOpen = false;
     state.inventory.editingMaterialId = null;
     state.inventory.duplicatingMaterialId = null;
+    state.inventory.confirmingDeleteMaterialId = null;
     render();
     return;
   }
@@ -2868,6 +2923,7 @@ async function createMaterial(form) {
   state.inventory.editorOpen = false;
   state.inventory.editingMaterialId = null;
   state.inventory.duplicatingMaterialId = null;
+  state.inventory.confirmingDeleteMaterialId = null;
   await loadWorkspace();
   showToast('Материал добавлен');
 }
@@ -2919,8 +2975,28 @@ async function updateMaterial(form) {
 
   state.inventory.editorOpen = false;
   state.inventory.editingMaterialId = null;
+  state.inventory.confirmingDeleteMaterialId = null;
   await loadWorkspace();
   showToast('Товар обновлен');
+}
+
+async function deleteMaterial(materialId) {
+  const material = state.materials.find((entry) => entry.id === materialId);
+  if (!material) throw new Error('Материал не найден');
+
+  const { error } = await supabase
+    .from('materials')
+    .update({ is_active: false })
+    .eq('id', materialId)
+    .eq('user_id', requireUserId());
+  if (error) throw error;
+
+  state.inventory.editorOpen = false;
+  state.inventory.editingMaterialId = null;
+  state.inventory.duplicatingMaterialId = null;
+  state.inventory.confirmingDeleteMaterialId = null;
+  await loadWorkspace();
+  showToast('Материал удален со склада');
 }
 
 async function createStockMovement(form) {
