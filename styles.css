@@ -1470,7 +1470,7 @@ button svg {
 
 .manual-material-controls {
   display: grid;
-  grid-template-columns: minmax(160px, 1.1fr) minmax(130px, 0.8fr) minmax(150px, 0.9fr) minmax(104px, auto);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 10px;
   align-items: end;
   min-width: 0;
@@ -1481,13 +1481,16 @@ button svg {
 }
 
 .manual-material-controls .primary-button {
-  width: 100%;
+  grid-column: 1 / -1;
+  justify-self: end;
+  width: min(180px, 100%);
   min-height: 48px;
   padding-inline: 14px;
 }
 
 .recipe-preview-strip {
   display: grid;
+  grid-column: 1 / -1;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 8px;
 }
