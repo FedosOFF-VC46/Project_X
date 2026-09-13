@@ -416,6 +416,25 @@ function ensureDraftRows(form, draft) {
   }
 }
 
+function renderBrandMark() {
+  return `
+    <div class="brand-mark" aria-hidden="true">
+      <svg class="formula-logo" viewBox="0 0 72 72" focusable="false">
+        <path class="formula-logo-track is-muted" d="M15 23H42" />
+        <path class="formula-logo-track is-muted" d="M15 36H42" />
+        <path class="formula-logo-track is-muted" d="M15 49H42" />
+        <path class="formula-logo-track is-live" d="M31 23H46" />
+        <path class="formula-logo-track is-live" d="M31 36H46" />
+        <path class="formula-logo-track is-live" d="M31 49H46" />
+        <circle class="formula-logo-node" cx="31" cy="23" r="2.7" />
+        <circle class="formula-logo-node" cx="31" cy="36" r="2.7" />
+        <circle class="formula-logo-node" cx="31" cy="49" r="2.7" />
+        <path class="formula-logo-result" d="M42 21L47 51L54 34L61 51L66 21" />
+      </svg>
+    </div>
+  `;
+}
+
 function renderAuth() {
   return `
     <div class="auth-toolbar">
@@ -424,10 +443,10 @@ function renderAuth() {
     <main class="auth-layout">
       <section class="auth-copy" aria-label="О приложении">
         <div class="brand-row">
-          <div class="brand-mark">RC</div>
+          ${renderBrandMark()}
           <div>
             <p class="eyebrow">Кабинет</p>
-            <h1>Мастерская</h1>
+            <h1>Формула</h1>
           </div>
         </div>
       </section>
@@ -534,9 +553,9 @@ function renderShell() {
     <div class="workspace-shell">
       <aside class="sidebar">
         <div class="sidebar-brand">
-          <div class="brand-mark">RC</div>
+          ${renderBrandMark()}
           <div>
-            <div class="brand-title">Мастерская</div>
+            <div class="brand-title">Формула</div>
           </div>
         </div>
         <nav class="nav-list" aria-label="Главное меню">

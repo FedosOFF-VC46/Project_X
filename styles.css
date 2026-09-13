@@ -241,12 +241,45 @@ body::before {
   height: 52px;
   place-items: center;
   border: 1px solid var(--line-strong);
-  border-radius: 8px;
+  border-radius: 14px;
   background: var(--media-surface);
   color: var(--green);
-  font-family: "Unbounded", "Geologica", sans-serif;
-  font-size: 16px;
-  font-weight: 700;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--green) 8%, transparent);
+}
+
+.formula-logo {
+  width: 34px;
+  height: 34px;
+  overflow: visible;
+}
+
+.formula-logo-track,
+.formula-logo-result {
+  fill: none;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.formula-logo-track {
+  stroke-width: 5.8;
+}
+
+.formula-logo-track.is-muted {
+  stroke: color-mix(in srgb, var(--green) 44%, var(--muted));
+  opacity: 0.62;
+}
+
+.formula-logo-track.is-live {
+  stroke: var(--green);
+}
+
+.formula-logo-node {
+  fill: var(--green);
+}
+
+.formula-logo-result {
+  stroke: var(--white);
+  stroke-width: 6.2;
 }
 
 .auth-layout {
