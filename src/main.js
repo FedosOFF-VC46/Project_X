@@ -47,6 +47,7 @@ const state = {
   productDesigner: {
     creatorOpen: false,
     duplicatingProductId: null,
+    editingProductId: null,
     categoryEditorOpen: false,
     activeCategory: 'coasters',
   },
@@ -1327,6 +1328,10 @@ function renderProductDetail(product) {
       </div>
 
       <div class="product-action-row">
+        <button class="ghost-button compact" data-action="edit-product" data-product-id="${product.id}" type="button">
+          <i data-lucide="pencil"></i>
+          Редактировать
+        </button>
         <button class="ghost-button compact" data-action="export-product-price" data-product-id="${product.id}" type="button">
           <i data-lucide="download"></i>
           Excel
@@ -1448,31 +1453,35 @@ function renderProductLibraryEmpty() {
 }
 
 function renderProductCreatorDialog() {
+  const editingProduct = state.products.find((item) => item.id === state.productDesigner.editingProductId);
   const duplicateProduct = state.products.find((item) => item.id === state.productDesigner.duplicatingProductId);
+  const sourceProduct = editingProduct ?? duplicateProduct ?? null;
+  const isEdit = Boolean(editingProduct);
   const isDuplicate = Boolean(duplicateProduct);
-  const selectedCategory = duplicateProduct ? getProductCategory(duplicateProduct) : getActiveProductCategory();
-  const selectedMarkup = getClosestMarkupSegmentKey(duplicateProduct);
-  const duplicateMaterialCost = duplicateProduct ? calculateProductMaterialCost(duplicateProduct.id) : 0;
-  const initialWorkHours = toNumber(duplicateProduct?.work_hours);
+  const selectedCategory = sourceProduct ? getProductCategory(sourceProduct) : getActiveProductCategory();
+  const selectedMarkup = getClosestMarkupSegmentKey(sourceProduct);
+  const sourceMaterialCost = sourceProduct ? calculateProductMaterialCost(sourceProduct.id) : 0;
+  const initialWorkHours = toNumber(sourceProduct?.work_hours);
   const initialMarkup = multiplierToMarkupPercent(MARKUP_SEGMENTS[selectedMarkup].multiplier);
-  const initialCost = duplicateMaterialCost + initialWorkHours * LABOR_RATE_PER_HOUR;
+  const initialCost = sourceMaterialCost + initialWorkHours * LABOR_RATE_PER_HOUR;
   const initialPrice = calculateSalePriceFromCost(initialCost, initialMarkup);
   return `
-    <section class="material-editor-layer" aria-label="${isDuplicate ? 'Копия изделия' : 'Новое изделие'}">
+    <section class="material-editor-layer" aria-label="${isEdit ? 'Редактирование изделия' : isDuplicate ? 'Копия изделия' : 'Новое изделие'}">
       <button class="registration-scrim" data-action="close-product-creator" type="button" aria-label="Закрыть"></button>
       <div class="material-editor-sheet">
         <div class="sheet-head">
           <div>
-            <p class="panel-kicker">${isDuplicate ? 'Копия' : 'Изделие'}</p>
-            <h2>${isDuplicate ? 'Похожая карта' : 'Новая карта'}</h2>
+            <p class="panel-kicker">${isEdit ? 'Редактирование' : isDuplicate ? 'Копия' : 'Изделие'}</p>
+            <h2>${isEdit ? escapeHtml(editingProduct.name) : isDuplicate ? 'Похожая карта' : 'Новая карта'}</h2>
           </div>
           <button class="icon-button" data-action="close-product-creator" type="button" title="Закрыть">
             <i data-lucide="x"></i>
           </button>
         </div>
-        <form class="stack-form" data-action="create-product" data-product-pricing-form>
+        <form class="stack-form" data-action="${isEdit ? 'update-product' : 'create-product'}" data-product-pricing-form>
+          <input type="hidden" name="product_id" value="${editingProduct?.id ?? ''}" />
           <input type="hidden" name="duplicate_product_id" value="${duplicateProduct?.id ?? ''}" />
-          <input type="hidden" name="duplicate_photo_path" value="${escapeAttr(duplicateProduct?.photo_path ?? '')}" />
+          <input type="hidden" name="duplicate_photo_path" value="${escapeAttr(sourceProduct?.photo_path ?? '')}" />
           <label>Раздел
             <select name="product_category">
               ${getProductCategories()
@@ -1480,11 +1489,11 @@ function renderProductCreatorDialog() {
                 .join('')}
             </select>
           </label>
-          <label>Название<input name="name" required value="${escapeAttr(duplicateProduct ? `${duplicateProduct.name} копия` : '')}" placeholder="Подстаканник Wave" /></label>
+          <label>Название<input name="name" required value="${escapeAttr(isEdit ? editingProduct.name : isDuplicate ? `${duplicateProduct.name} копия` : '')}" placeholder="Подстаканник Wave" /></label>
           <div class="form-grid">
             <label>Время работы
               <span class="input-with-suffix">
-                <input name="work_hours" data-product-work-source type="number" step="0.1" min="0" value="${escapeAttr(duplicateProduct?.work_hours ?? '')}" placeholder="1.5" />
+                <input name="work_hours" data-product-work-source type="number" step="0.1" min="0" value="${escapeAttr(sourceProduct?.work_hours ?? '')}" placeholder="1.5" />
                 <span>ч</span>
               </span>
             </label>
@@ -1498,11 +1507,11 @@ function renderProductCreatorDialog() {
           </div>
           <div class="unit-price-preview">
             <span>Расчетная цена</span>
-            <strong data-product-price-preview data-material-cost="${escapeAttr(duplicateMaterialCost)}" data-labor-rate="${escapeAttr(LABOR_RATE_PER_HOUR)}">${formatCurrency(initialPrice)} / шт</strong>
+            <strong data-product-price-preview data-material-cost="${escapeAttr(sourceMaterialCost)}" data-labor-rate="${escapeAttr(LABOR_RATE_PER_HOUR)}">${formatCurrency(initialPrice)} / шт</strong>
           </div>
-          ${renderFilePicker(duplicateProduct?.photo_path)}
-          <label>Описание<textarea name="description" rows="3" placeholder="Размер, форма, особенности">${escapeHtml(duplicateProduct?.description ?? '')}</textarea></label>
-          <button class="primary-button" type="submit">${isDuplicate ? 'Создать копию' : 'Добавить изделие'}</button>
+          ${renderFilePicker(sourceProduct?.photo_path)}
+          <label>Описание<textarea name="description" rows="3" placeholder="Размер, форма, особенности">${escapeHtml(sourceProduct?.description ?? '')}</textarea></label>
+          <button class="primary-button" type="submit">${isEdit ? 'Сохранить изменения' : isDuplicate ? 'Создать копию' : 'Добавить изделие'}</button>
         </form>
       </div>
     </section>
@@ -3030,6 +3039,7 @@ document.addEventListener('click', async (event) => {
   if (action === 'open-product-creator') {
     state.productDesigner.creatorOpen = true;
     state.productDesigner.duplicatingProductId = null;
+    state.productDesigner.editingProductId = null;
     render();
   }
   if (action === 'set-product-category') {
@@ -3048,11 +3058,19 @@ document.addEventListener('click', async (event) => {
   if (action === 'duplicate-product') {
     state.productDesigner.creatorOpen = true;
     state.productDesigner.duplicatingProductId = actionButton.dataset.productId;
+    state.productDesigner.editingProductId = null;
+    render();
+  }
+  if (action === 'edit-product') {
+    state.productDesigner.creatorOpen = true;
+    state.productDesigner.editingProductId = actionButton.dataset.productId;
+    state.productDesigner.duplicatingProductId = null;
     render();
   }
   if (action === 'close-product-creator') {
     state.productDesigner.creatorOpen = false;
     state.productDesigner.duplicatingProductId = null;
+    state.productDesigner.editingProductId = null;
     render();
   }
   if (action === 'open-calculation-dialog') {
@@ -3215,6 +3233,7 @@ document.addEventListener('keydown', (event) => {
   if (state.productDesigner.creatorOpen) {
     state.productDesigner.creatorOpen = false;
     state.productDesigner.duplicatingProductId = null;
+    state.productDesigner.editingProductId = null;
     render();
     return;
   }
@@ -3260,6 +3279,7 @@ document.addEventListener('submit', async (event) => {
     if (action === 'update-product-stock') await updateProductStock(form);
     if (action === 'stock-movement') await createStockMovement(form);
     if (action === 'create-product') await createProduct(form);
+    if (action === 'update-product') await updateProduct(form);
     if (action === 'create-product-category') createProductCategory(form);
     if (action === 'apply-mold-to-product') await applyMoldToProduct(form);
     if (action === 'add-product-material') await addProductMaterial(form);
@@ -3659,9 +3679,50 @@ async function createProduct(form) {
   state.productDesigner.activeCategory = category;
   state.productDesigner.creatorOpen = false;
   state.productDesigner.duplicatingProductId = null;
+  state.productDesigner.editingProductId = null;
   form.reset();
   await loadWorkspace();
   showToast(duplicateProductId ? 'Копия изделия создана' : 'Изделие добавлено');
+}
+
+async function updateProduct(form) {
+  const data = new FormData(form);
+  const productId = String(data.get('product_id'));
+  const product = state.products.find((entry) => entry.id === productId);
+  if (!product) throw new Error('Изделие не найдено');
+
+  const file = data.get('photo');
+  const photoPath = file instanceof File && file.size ? await uploadPhoto(file, 'products') : product.photo_path;
+  const markup = getMarkupPercentFromForm(form);
+  const workHours = toNumber(data.get('work_hours'));
+  const category = optionalString(data.get('product_category')) || getProductCategory(product);
+  const cost = calculateProductMaterialCost(productId) + workHours * LABOR_RATE_PER_HOUR;
+  const price = calculateSalePriceFromCost(cost, markup);
+
+  const { error } = await supabase
+    .from('products')
+    .update({
+      name: String(data.get('name')).trim(),
+      product_category: category,
+      work_hours: workHours,
+      markup_percent: markup,
+      default_sale_price: price,
+      photo_path: photoPath,
+      description: optionalString(data.get('description')),
+    })
+    .eq('id', productId)
+    .eq('user_id', requireUserId());
+  if (error) throw error;
+
+  state.activeProductId = productId;
+  state.calculator.productId = productId;
+  state.productDesigner.activeCategory = category;
+  state.productDesigner.creatorOpen = false;
+  state.productDesigner.editingProductId = null;
+  state.productDesigner.duplicatingProductId = null;
+  form.reset();
+  await loadWorkspace();
+  showToast('Карта изделия обновлена');
 }
 
 function createProductCategory(form) {
