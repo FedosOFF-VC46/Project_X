@@ -2097,14 +2097,20 @@ function renderMoldView() {
   const componentRows = editingItems.length
     ? editingItems.map((item, index) => renderMoldComponentRow(index, item)).join('')
     : renderMoldComponentRow(0);
+  const lengthValue = editingCalculation?.mold_length_cm ?? '';
+  const widthValue = editingCalculation?.mold_width_cm ?? '';
+  const heightValue = editingCalculation?.mold_height_cm ?? '';
+  const hasGeometry = toNumber(lengthValue) > 0 && toNumber(widthValue) > 0 && toNumber(heightValue) > 0;
+  const recommendedValue = editingCalculation?.recommended_volume_ml ?? (editingCalculation && !hasGeometry ? getMoldMainVolume(editingCalculation) : '');
+  const finishCoefficientValue = editingCalculation?.finish_coefficient ?? '';
 
   return `
     <section class="mold-lab-layout">
       <div class="panel mold-composer-panel">
         <div class="panel-head">
           <div>
-            <p class="panel-kicker">${editingCalculation ? 'Редактирование' : 'Молд'}</p>
-            <h2>${editingCalculation ? escapeHtml(editingCalculation.title || 'Без названия') : 'Молд и состав'}</h2>
+            <p class="panel-kicker">${editingCalculation ? 'Редактирование' : 'Расчет на молд'}</p>
+            <h2>${editingCalculation ? escapeHtml(editingCalculation.title || 'Без названия') : 'Новый молд'}</h2>
           </div>
           ${
             editingCalculation
@@ -2114,26 +2120,63 @@ function renderMoldView() {
         </div>
         <form class="stack-form mold-form" data-action="save-mold-calculation">
           <input type="hidden" name="calculation_id" value="${escapeAttr(editingCalculation?.id ?? '')}" />
-          <label>Что заливаем<input name="title" value="${escapeAttr(editingCalculation?.title ?? '')}" placeholder="Часы Wave" /></label>
+          <label>Название молда<input name="title" value="${escapeAttr(editingCalculation?.title ?? '')}" placeholder="Часы Wave" /></label>
+
+          <div class="mold-section-card">
+            <div class="mold-component-head">
+              <div>
+                <p class="panel-kicker">Размер</p>
+                <h3>Длина × ширина × высота</h3>
+              </div>
+              <strong data-mold-base-preview>${formatQty(hasGeometry ? getMoldBaseVolume(editingCalculation) : 0)} мл</strong>
+            </div>
+            <div class="mold-size-grid">
+              <label>Длина
+                <span class="input-with-suffix">
+                  <input name="mold_length_cm" type="number" step="0.1" min="0" value="${escapeAttr(lengthValue)}" placeholder="12" data-mold-source />
+                  <span>см</span>
+                </span>
+              </label>
+              <label>Ширина
+                <span class="input-with-suffix">
+                  <input name="mold_width_cm" type="number" step="0.1" min="0" value="${escapeAttr(widthValue)}" placeholder="8" data-mold-source />
+                  <span>см</span>
+                </span>
+              </label>
+              <label>Высота
+                <span class="input-with-suffix">
+                  <input name="mold_height_cm" type="number" step="0.1" min="0" value="${escapeAttr(heightValue)}" placeholder="1.5" data-mold-source />
+                  <span>см</span>
+                </span>
+              </label>
+            </div>
+          </div>
+
           <div class="form-grid">
-            <label>Объем молда
+            <label>Рекомендовано производителем
               <span class="input-with-suffix">
-                <input name="mold_volume_ml" type="number" step="0.001" min="0.001" required value="${escapeAttr(editingCalculation?.mold_volume_ml ?? '')}" placeholder="120" data-mold-source />
+                <input name="recommended_volume_ml" type="number" step="0.001" min="0" value="${escapeAttr(recommendedValue)}" placeholder="120" data-mold-source />
                 <span>мл</span>
               </span>
             </label>
-            <label>Заполнение
+            <label>Финиш на 1 см²
               <span class="input-with-suffix">
-                <input name="fill_percent" type="number" step="0.1" min="0.1" value="${escapeAttr(editingCalculation?.fill_percent ?? 100)}" required data-mold-source />
-                <span>%</span>
+                <input name="finish_coefficient" type="number" step="0.001" min="0" value="${escapeAttr(finishCoefficientValue)}" placeholder="0.08" data-mold-source />
+                <span>мл</span>
               </span>
             </label>
+          </div>
+          <div class="mold-live-formula">
+            <span>Основная заливка</span>
+            <strong data-mold-main-preview>${formatQty(getMoldMainVolume(editingCalculation))} мл</strong>
+            <span>Финиш</span>
+            <strong data-mold-finish-preview>${formatQty(getMoldFinishVolume(editingCalculation))} мл</strong>
           </div>
 
           <div class="mold-component-head">
             <div>
-              <p class="panel-kicker">Компоненты</p>
-              <h3>Материалы со склада</h3>
+              <p class="panel-kicker">Состав</p>
+              <h3>Что уйдет в заливку</h3>
             </div>
             <button class="ghost-button compact" data-action="add-mold-component" type="button" ${!state.materials.length ? 'disabled' : ''}>
               <i data-lucide="plus"></i>
@@ -2144,8 +2187,8 @@ function renderMoldView() {
             ${state.materials.length ? componentRows : renderMoldNoMaterials()}
           </div>
 
-          <label>Заметка<textarea name="notes" rows="3" placeholder="Например: прозрачная база, зеленый пигмент, золото">${escapeHtml(editingCalculation?.notes ?? '')}</textarea></label>
-          <button class="primary-button" type="submit" ${!state.materials.length ? 'disabled' : ''}>
+          <label>Примечание<textarea name="notes" rows="3" placeholder="Например: прозрачная база, зеленый пигмент, золото">${escapeHtml(editingCalculation?.notes ?? '')}</textarea></label>
+          <button class="primary-button" type="submit">
             <i data-lucide="save"></i>
             ${editingCalculation ? 'Сохранить изменения' : 'Сохранить расчет'}
           </button>
@@ -2163,11 +2206,11 @@ function renderMoldView() {
           </div>
           <div class="mold-summary-grid">
             <div>
-              <span>Нужно залить</span>
+              <span>Всего смолы</span>
               <strong data-mold-target-volume>0 мл</strong>
             </div>
             <div>
-              <span>Добавлено</span>
+              <span>В составе</span>
               <strong data-mold-used-volume>0</strong>
             </div>
             <div>
@@ -2251,6 +2294,7 @@ function renderMoldRows() {
           (item) => {
             const rows = getMoldItems(item.id);
             const cost = getMoldTotalCost(item, rows);
+            const totalVolume = getMoldTotalVolume(item);
             return `
               <button class="mold-history-card ${state.moldEditor.editingCalculationId === item.id ? 'is-active' : ''}" data-action="edit-mold-calculation" data-calculation-id="${item.id}" type="button">
                 <div class="mold-history-top">
@@ -2258,10 +2302,14 @@ function renderMoldRows() {
                     <time>${formatDate(item.created_at)}</time>
                     <h3>${escapeHtml(item.title || 'Без названия')}</h3>
                   </div>
-                  <strong>${formatCurrency(cost)}</strong>
+                  <strong>${formatQty(totalVolume)} мл</strong>
+                </div>
+                <div class="mold-history-facts">
+                  <span>Состав ${rows.length || (item.material_id ? 1 : 0)}</span>
+                  <span>${formatCurrency(cost)}</span>
                 </div>
                 <div class="mold-history-mix">
-                  ${rows.length ? rows.map(renderMoldHistoryItem).join('') : renderLegacyMoldHistoryItem(item)}
+                  ${rows.length ? rows.map(renderMoldHistoryItem).join('') : item.material_id ? renderLegacyMoldHistoryItem(item) : '<span>Компоненты можно добавить позже</span>'}
                 </div>
               </button>
             `;
@@ -2548,9 +2596,15 @@ function updateProductPricePreview(form) {
 
 function updateMoldComposerPreview(form) {
   if (!form) return;
-  const targetVolume = toNumber(form.querySelector('[name="mold_volume_ml"]')?.value);
-  const fillPercent = toNumber(form.querySelector('[name="fill_percent"]')?.value) || 100;
-  const target = targetVolume * (fillPercent / 100);
+  const length = toNumber(form.querySelector('[name="mold_length_cm"]')?.value);
+  const width = toNumber(form.querySelector('[name="mold_width_cm"]')?.value);
+  const height = toNumber(form.querySelector('[name="mold_height_cm"]')?.value);
+  const baseVolume = length > 0 && width > 0 && height > 0 ? length * width * height : 0;
+  const recommendedVolume = toNumber(form.querySelector('[name="recommended_volume_ml"]')?.value);
+  const finishCoefficient = toNumber(form.querySelector('[name="finish_coefficient"]')?.value);
+  const finishVolume = length > 0 && width > 0 && finishCoefficient > 0 ? length * width * finishCoefficient : 0;
+  const mainVolume = recommendedVolume > 0 ? recommendedVolume : baseVolume;
+  const target = mainVolume + finishVolume;
   const unitTotals = new Map();
   let costTotal = 0;
   let filledRows = 0;
@@ -2584,11 +2638,15 @@ function updateMoldComposerPreview(form) {
 
   const used = [...unitTotals.entries()].map(([unit, value]) => `${formatQty(value)} ${unit}`).join(' + ') || '0';
   const stockStatus = shortageRows ? `Не хватает: ${shortageRows}` : filledRows ? 'Все есть' : 'Выберите материалы';
+  const root = form.closest('.mold-lab-layout');
 
-  form.closest('.mold-lab-layout')?.querySelector('[data-mold-target-volume]')?.replaceChildren(`${formatQty(target)} мл`);
-  form.closest('.mold-lab-layout')?.querySelector('[data-mold-used-volume]')?.replaceChildren(used);
-  form.closest('.mold-lab-layout')?.querySelector('[data-mold-cost-total]')?.replaceChildren(formatCurrency(costTotal));
-  form.closest('.mold-lab-layout')?.querySelector('[data-mold-stock-status]')?.replaceChildren(stockStatus);
+  root?.querySelector('[data-mold-base-preview]')?.replaceChildren(`${formatQty(baseVolume)} мл`);
+  root?.querySelector('[data-mold-main-preview]')?.replaceChildren(`${formatQty(mainVolume)} мл`);
+  root?.querySelector('[data-mold-finish-preview]')?.replaceChildren(`${formatQty(finishVolume)} мл`);
+  root?.querySelector('[data-mold-target-volume]')?.replaceChildren(`${formatQty(target)} мл`);
+  root?.querySelector('[data-mold-used-volume]')?.replaceChildren(used);
+  root?.querySelector('[data-mold-cost-total]')?.replaceChildren(formatCurrency(costTotal));
+  root?.querySelector('[data-mold-stock-status]')?.replaceChildren(stockStatus);
 }
 
 function getMoldItems(calculationId) {
@@ -2624,6 +2682,36 @@ function getMoldEditableItems(calculation) {
 function getMoldTotalCost(calculation, items = getMoldItems(calculation.id)) {
   if (items.length) return items.reduce((sum, item) => sum + toNumber(item.total_cost), 0);
   return toNumber(calculation.material_cost_total);
+}
+
+function getMoldBaseVolume(calculation) {
+  if (!calculation) return 0;
+  const stored = toNumber(calculation.base_volume_ml);
+  if (stored > 0) return stored;
+  const length = toNumber(calculation.mold_length_cm);
+  const width = toNumber(calculation.mold_width_cm);
+  const height = toNumber(calculation.mold_height_cm);
+  if (length > 0 && width > 0 && height > 0) return length * width * height;
+  return toNumber(calculation.mold_volume_ml);
+}
+
+function getMoldMainVolume(calculation) {
+  if (!calculation) return 0;
+  return toNumber(calculation.recommended_volume_ml) || getMoldBaseVolume(calculation);
+}
+
+function getMoldFinishVolume(calculation) {
+  if (!calculation) return 0;
+  const stored = toNumber(calculation.finish_volume_ml);
+  if (stored > 0) return stored;
+  const length = toNumber(calculation.mold_length_cm);
+  const width = toNumber(calculation.mold_width_cm);
+  const coefficient = toNumber(calculation.finish_coefficient);
+  return length > 0 && width > 0 && coefficient > 0 ? length * width * coefficient : 0;
+}
+
+function getMoldTotalVolume(calculation) {
+  return getMoldMainVolume(calculation) + getMoldFinishVolume(calculation);
 }
 
 function calculateProductMaterialCost(productId) {
@@ -3945,6 +4033,15 @@ async function createProductFlowMovement(form) {
 async function saveMoldCalculation(form) {
   const data = new FormData(form);
   const calculationId = optionalString(data.get('calculation_id'));
+  const title = optionalString(data.get('title'));
+  const length = nullableNumber(data.get('mold_length_cm'));
+  const width = nullableNumber(data.get('mold_width_cm'));
+  const height = nullableNumber(data.get('mold_height_cm'));
+  const baseVolume = length && width && height ? length * width * height : null;
+  const recommendedVolume = nullableNumber(data.get('recommended_volume_ml'));
+  const finishCoefficient = nullableNumber(data.get('finish_coefficient'));
+  const finishVolume = length && width && finishCoefficient ? length * width * finishCoefficient : null;
+  const targetVolume = (recommendedVolume || baseVolume || 0) + (finishVolume || 0);
   const materialIds = data.getAll('mold_material_id[]').map((value) => String(value));
   const quantities = data.getAll('mold_quantity[]').map(toNumber);
   const items = materialIds
@@ -3965,15 +4062,22 @@ async function saveMoldCalculation(form) {
     })
     .filter(Boolean);
 
-  if (!items.length) throw new Error('Добавьте хотя бы один компонент');
+  if (!title) throw new Error('Укажите название молда');
 
   const payload = {
-    title: optionalString(data.get('title')),
+    title,
     material_id: null,
     material_name_snapshot: null,
     unit_snapshot: null,
-    mold_volume_ml: toNumber(data.get('mold_volume_ml')),
-    fill_percent: toNumber(data.get('fill_percent')) || 100,
+    mold_volume_ml: targetVolume,
+    mold_length_cm: length,
+    mold_width_cm: width,
+    mold_height_cm: height,
+    base_volume_ml: baseVolume,
+    recommended_volume_ml: recommendedVolume,
+    finish_coefficient: finishCoefficient,
+    finish_volume_ml: finishVolume,
+    fill_percent: 100,
     waste_percent: 0,
     unit_price_snapshot: 0,
     sale_price: 0,
@@ -4009,8 +4113,10 @@ async function saveMoldCalculation(form) {
   }
 
   const rows = items.map((item) => ({ ...item, calculation_id: savedCalculationId }));
-  const { error: itemsError } = await supabase.from('mold_calculation_items').insert(rows);
-  if (itemsError) throw itemsError;
+  if (rows.length) {
+    const { error: itemsError } = await supabase.from('mold_calculation_items').insert(rows);
+    if (itemsError) throw itemsError;
+  }
 
   if (!calculationId) form.reset();
   state.moldEditor.editingCalculationId = null;
@@ -4133,6 +4239,13 @@ function toUserMessage(error) {
 function toNumber(value) {
   const number = Number(value ?? 0);
   return Number.isFinite(number) ? number : 0;
+}
+
+function nullableNumber(value) {
+  const text = String(value ?? '').trim();
+  if (!text) return null;
+  const number = Number(text);
+  return Number.isFinite(number) ? number : null;
 }
 
 function optionalString(value) {

@@ -1281,6 +1281,56 @@ button svg {
   font-size: 18px;
 }
 
+.mold-component-head strong {
+  align-self: flex-start;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 8px 10px;
+  background: var(--ghost);
+  color: var(--green);
+  font-size: 16px;
+  white-space: nowrap;
+}
+
+.mold-section-card {
+  display: grid;
+  gap: 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 14px;
+  background: linear-gradient(135deg, var(--ghost), color-mix(in srgb, var(--green) 5%, transparent));
+}
+
+.mold-size-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.mold-live-formula {
+  display: grid;
+  grid-template-columns: repeat(4, auto);
+  gap: 10px;
+  align-items: center;
+  justify-content: start;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 12px 14px;
+  background: var(--panel-muted);
+}
+
+.mold-live-formula span {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.mold-live-formula strong {
+  color: var(--green);
+  font-size: 18px;
+}
+
 .mold-component-list,
 .mold-history-list {
   display: grid;
@@ -1435,6 +1485,24 @@ button svg {
   color: var(--green);
   font-size: 18px;
   white-space: nowrap;
+}
+
+.mold-history-facts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding-top: 10px;
+}
+
+.mold-history-facts span {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 6px 9px;
+  background: var(--ghost);
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 900;
+  text-transform: uppercase;
 }
 
 .mold-history-mix {
@@ -3679,6 +3747,11 @@ button svg {
 
   .manual-material-controls,
   .recipe-preview-strip {
+    grid-template-columns: 1fr;
+  }
+
+  .mold-size-grid,
+  .mold-live-formula {
     grid-template-columns: 1fr;
   }
 
