@@ -1701,9 +1701,39 @@ button svg {
 
 .sale-price-form {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr) 120px auto;
   gap: 10px;
   align-items: end;
+}
+
+.price-inline-preview {
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 11px 12px;
+  background: var(--ghost);
+}
+
+.price-inline-preview span,
+.price-inline-preview strong {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.price-inline-preview span {
+  margin-bottom: 5px;
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.price-inline-preview strong {
+  color: var(--green);
+  font-size: 15px;
+  line-height: 1.1;
 }
 
 .sales-batch-list {

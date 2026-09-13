@@ -481,7 +481,7 @@ function renderDashboardView() {
   const materialValue = state.materials.reduce((sum, item) => sum + toNumber(item.current_stock) * toNumber(item.unit_price), 0);
   const lowStock = state.materials.filter((item) => toNumber(item.current_stock) <= toNumber(item.min_stock) && toNumber(item.min_stock) > 0);
   const lastCalculation = state.calculations[0];
-  const pricedProducts = state.products.filter((product) => toNumber(product.default_sale_price) > 0);
+  const pricedProducts = state.products.filter((product) => calculateProductSalePrice(product) > 0);
 
   return `
     <section class="dashboard-grid">
@@ -500,9 +500,9 @@ function renderDashboardView() {
         `${state.products.length} изделий`,
         `${state.calculations.length} запусков`,
       ], 'products')}
-      ${renderProcessCard('Продажи', 'Цена, маржа, готовый каталог', [
+      ${renderProcessCard('Продажи', 'Цена, наценка, готовый каталог', [
         `${pricedProducts.length} с ценой`,
-        averageMarginLabel(),
+        averageMarkupLabel(),
       ], 'sales')}
     </section>
 
@@ -629,6 +629,7 @@ function renderProductInventoryItem(product) {
   const minStock = toNumber(product.min_stock);
   const stockTone = minStock > 0 && stock <= minStock ? 'is-low' : '';
   const cost = calculateProductCost(product.id);
+  const price = calculateProductSalePrice(product);
   return `
     <button class="material-card product-stock-card ${stockTone}" data-action="edit-product-stock" data-product-id="${product.id}" type="button">
       <div class="thumb">${photo ? `<img src="${photo}" alt="" />` : '<i data-lucide="package"></i>'}</div>
@@ -647,7 +648,7 @@ function renderProductInventoryItem(product) {
         </span>
         <span>
           <small>Цена</small>
-          <strong>${formatCurrency(product.default_sale_price)} / шт</strong>
+          <strong>${formatCurrency(price)} / шт</strong>
         </span>
       </div>
     </button>
@@ -671,6 +672,8 @@ function renderProductStockEditor() {
 
   const photo = getPhotoUrl(product.photo_path);
   const cost = calculateProductCost(product.id);
+  const markup = getProductMarkup(product);
+  const price = calculateProductSalePrice(product);
   const stock = getProductStock(product);
   return `
     <section class="material-editor-layer" aria-label="Склад продукции">
@@ -707,10 +710,14 @@ function renderProductStockEditor() {
           </div>
           <div>
             <span>Цена продажи</span>
-            <strong>${formatCurrency(product.default_sale_price)} / шт</strong>
+            <strong>${formatCurrency(price)} / шт</strong>
+          </div>
+          <div>
+            <span>Наценка</span>
+            <strong>${formatPercent(markup)}</strong>
           </div>
         </div>
-        <form class="stack-form" data-action="update-product-stock">
+        <form class="stack-form" data-action="update-product-stock" data-product-pricing-form>
           <input type="hidden" name="product_id" value="${product.id}" />
           <div class="form-grid">
             <label>Минимум на складе
@@ -719,12 +726,16 @@ function renderProductStockEditor() {
                 <span>шт</span>
               </span>
             </label>
-            <label>Цена продажи
+            <label>Наценка к себестоимости
               <span class="input-with-suffix">
-                <input name="default_sale_price" type="number" step="0.01" min="0" value="${escapeAttr(product.default_sale_price ?? '')}" placeholder="1500" />
-                <span>₽/шт</span>
+                <input name="markup_percent" data-markup-source type="number" step="0.01" min="0" value="${escapeAttr(product.markup_percent ?? 0)}" placeholder="400" />
+                <span>%</span>
               </span>
             </label>
+          </div>
+          <div class="unit-price-preview">
+            <span>Цена продажи</span>
+            <strong data-product-price-preview data-cost="${escapeAttr(cost)}">${formatCurrency(price)} / шт</strong>
           </div>
           <button class="ghost-button compact" data-view="calculator" type="button">Логистика</button>
           <button class="primary-button" type="submit">Сохранить</button>
@@ -946,6 +957,8 @@ function renderProductLibraryCard(product) {
   const photo = getPhotoUrl(product.photo_path);
   const isActive = state.activeProductId === product.id;
   const cost = calculateProductCost(product.id);
+  const markup = getProductMarkup(product);
+  const price = calculateProductSalePrice(product);
   const recipeCount = state.productMaterials.filter((row) => row.product_id === product.id).length;
   const stock = getProductStock(product);
   return `
@@ -961,12 +974,12 @@ function renderProductLibraryCard(product) {
           <strong>${formatCurrency(cost)}</strong>
         </span>
         <span>
-          <small>Цена</small>
-          <strong>${formatCurrency(product.default_sale_price)}</strong>
+          <small>Наценка</small>
+          <strong>${formatPercent(markup)}</strong>
         </span>
         <span>
-          <small>Состав</small>
-          <strong>${recipeCount}</strong>
+          <small>Цена</small>
+          <strong>${formatCurrency(price)}</strong>
         </span>
       </div>
     </button>
@@ -976,7 +989,8 @@ function renderProductLibraryCard(product) {
 function renderProductDetail(product) {
   const photo = getPhotoUrl(product.photo_path);
   const cost = calculateProductCost(product.id);
-  const price = toNumber(product.default_sale_price);
+  const markup = getProductMarkup(product);
+  const price = calculateProductSalePrice(product);
   const stock = getProductStock(product);
   const recipeCount = state.productMaterials.filter((row) => row.product_id === product.id).length;
   return `
@@ -998,16 +1012,16 @@ function renderProductDetail(product) {
           <strong>${formatCurrency(cost)} / шт</strong>
         </div>
         <div>
+          <span>Наценка</span>
+          <strong>${formatPercent(markup)}</strong>
+        </div>
+        <div>
           <span>Цена продажи</span>
           <strong>${formatCurrency(price)} / шт</strong>
         </div>
         <div>
           <span>На складе</span>
           <strong>${formatQty(stock)} шт</strong>
-        </div>
-        <div>
-          <span>Компоненты</span>
-          <strong>${recipeCount}</strong>
         </div>
       </div>
 
@@ -1084,7 +1098,12 @@ function renderProductCreatorDialog() {
         </div>
         <form class="stack-form" data-action="create-product">
           <label>Название<input name="name" required placeholder="Подстаканник Wave" /></label>
-          <label>Цена продажи<input name="default_sale_price" type="number" step="0.01" min="0" placeholder="1500" /></label>
+          <label>Наценка к себестоимости
+            <span class="input-with-suffix">
+              <input name="markup_percent" type="number" step="0.01" min="0" placeholder="400" />
+              <span>%</span>
+            </span>
+          </label>
           ${renderFilePicker()}
           <label>Описание<textarea name="description" rows="3" placeholder="Размер, форма, особенности"></textarea></label>
           <button class="primary-button" type="submit">Добавить изделие</button>
@@ -1504,14 +1523,14 @@ function renderBatchEstimate(estimate) {
 }
 
 function renderSalesView() {
-  const pricedProducts = state.products.filter((product) => toNumber(product.default_sale_price) > 0);
+  const pricedProducts = state.products.filter((product) => calculateProductSalePrice(product) > 0);
   const lastCalculation = state.calculations[0];
 
   return `
     <section class="dashboard-grid">
       ${renderMetric('Каталог', state.products.length, 'package-check')}
       ${renderMetric('С ценой', pricedProducts.length, 'badge-russian-ruble')}
-      ${renderMetric('Средняя маржа', averageMarginLabel(), 'chart-no-axes-combined')}
+      ${renderMetric('Средняя наценка', averageMarkupLabel(), 'chart-no-axes-combined')}
       ${renderMetric('Последняя прибыль', formatCurrency(lastCalculation?.profit_total ?? 0), 'trending-up')}
     </section>
 
@@ -1519,7 +1538,7 @@ function renderSalesView() {
       <div class="panel-head">
         <div>
           <p class="panel-kicker">Готовые изделия</p>
-          <h2>Цены и маржа</h2>
+          <h2>Цены и наценка</h2>
         </div>
         <i data-lucide="badge-russian-ruble"></i>
       </div>
@@ -1543,9 +1562,9 @@ function renderSalesView() {
 
 function renderSalesCard(product) {
   const cost = calculateProductCost(product.id);
-  const price = toNumber(product.default_sale_price);
+  const markup = getProductMarkup(product);
+  const price = calculateProductSalePrice(product);
   const profit = price - cost;
-  const margin = price > 0 ? (profit / price) * 100 : null;
   const photo = getPhotoUrl(product.photo_path);
   const stock = getProductStock(product);
   const batches = getProductBatches(product.id, { availableOnly: true });
@@ -1556,7 +1575,7 @@ function renderSalesCard(product) {
         <div class="thumb">${photo ? `<img src="${photo}" alt="" />` : '<i data-lucide="package"></i>'}</div>
         <div>
           <h3>${escapeHtml(product.name)}</h3>
-          <p>${price > 0 ? `${formatPercent(margin)} маржа` : 'Цена не задана'}</p>
+          <p>${cost > 0 ? `${formatPercent(markup)} наценка` : 'Состав не применен'}</p>
         </div>
       </div>
       <div class="sales-numbers">
@@ -1571,9 +1590,18 @@ function renderSalesCard(product) {
           Продать
         </button>
       </div>
-      <form class="sale-price-form" data-action="update-sale-price">
+      <form class="sale-price-form" data-action="update-product-markup" data-product-pricing-form>
         <input type="hidden" name="product_id" value="${product.id}" />
-        <label>Цена продажи<input name="default_sale_price" type="number" step="0.01" min="0" value="${escapeAttr(price || '')}" placeholder="1500" /></label>
+        <label>Наценка
+          <span class="input-with-suffix">
+            <input name="markup_percent" data-markup-source type="number" step="0.01" min="0" value="${escapeAttr(markup)}" placeholder="400" />
+            <span>%</span>
+          </span>
+        </label>
+        <div class="price-inline-preview">
+          <span>Цена</span>
+          <strong data-product-price-preview data-cost="${escapeAttr(cost)}">${formatCurrency(price)}</strong>
+        </div>
         <button class="ghost-button compact" type="submit">Сохранить</button>
       </form>
     </article>
@@ -2065,6 +2093,15 @@ function updateRecipeFormPreview(form) {
   if (costValue) costValue.textContent = formatCurrency(cost);
 }
 
+function updateProductPricePreview(form) {
+  if (!form) return;
+  const markup = toNumber(form.querySelector('[name="markup_percent"]')?.value);
+  const preview = form.querySelector('[data-product-price-preview]');
+  const cost = toNumber(preview?.dataset.cost);
+  if (!preview) return;
+  preview.textContent = `${formatCurrency(calculateSalePriceFromCost(cost, markup))}${preview.closest('.unit-price-preview') ? ' / шт' : ''}`;
+}
+
 function updateMoldComposerPreview(form) {
   if (!form) return;
   const targetVolume = toNumber(form.querySelector('[name="mold_volume_ml"]')?.value);
@@ -2154,6 +2191,19 @@ function calculateProductCost(productId) {
     }, 0);
 }
 
+function getProductMarkup(product) {
+  return toNumber(product?.markup_percent);
+}
+
+function calculateSalePriceFromCost(cost, markupPercent) {
+  if (cost <= 0) return 0;
+  return Math.round(cost * (1 + markupPercent / 100) * 100) / 100;
+}
+
+function calculateProductSalePrice(product) {
+  return calculateSalePriceFromCost(calculateProductCost(product.id), getProductMarkup(product));
+}
+
 function getProductBatches(productId, options = {}) {
   const batches = state.productBatches.filter((batch) => batch.product_id === productId);
   return options.availableOnly ? batches.filter((batch) => toNumber(batch.remaining_quantity) > 0) : batches;
@@ -2165,17 +2215,12 @@ function getProductStock(product) {
   return batches.reduce((sum, batch) => sum + toNumber(batch.remaining_quantity), 0);
 }
 
-function averageMarginLabel() {
-  const margins = state.products
-    .map((product) => {
-      const price = toNumber(product.default_sale_price);
-      if (price <= 0) return null;
-      const cost = calculateProductCost(product.id);
-      return ((price - cost) / price) * 100;
-    })
-    .filter((value) => value !== null && Number.isFinite(value));
-  if (!margins.length) return '0%';
-  return formatPercent(margins.reduce((sum, value) => sum + value, 0) / margins.length);
+function averageMarkupLabel() {
+  const markups = state.products
+    .map((product) => getProductMarkup(product))
+    .filter((value) => value > 0 && Number.isFinite(value));
+  if (!markups.length) return '0%';
+  return formatPercent(markups.reduce((sum, value) => sum + value, 0) / markups.length);
 }
 
 function calculateBatch(productId, batch, salePrice) {
@@ -2472,6 +2517,9 @@ document.addEventListener('input', (event) => {
   if (target.matches('[data-recipe-material], [data-recipe-source]')) {
     updateRecipeFormPreview(target.closest('form'));
   }
+  if (target.matches('[data-markup-source]')) {
+    updateProductPricePreview(target.closest('form'));
+  }
   if (target.matches('[data-mold-material], [data-mold-source], [data-mold-quantity]')) {
     updateMoldComposerPreview(target.closest('form'));
   }
@@ -2534,7 +2582,7 @@ document.addEventListener('submit', async (event) => {
     if (action === 'stock-movement') await createStockMovement(form);
     if (action === 'create-product') await createProduct(form);
     if (action === 'apply-mold-to-product') await applyMoldToProduct(form);
-    if (action === 'update-sale-price') await updateSalePrice(form);
+    if (action === 'update-product-markup') await updateProductMarkup(form);
     if (action === 'finalize-calculation') await finalizeCalculation(form);
     if (action === 'product-flow-movement') await createProductFlowMovement(form);
     if (action === 'save-mold-calculation') await saveMoldCalculation(form);
@@ -2727,11 +2775,14 @@ async function updateProductStock(form) {
   const product = state.products.find((entry) => entry.id === productId);
   if (!product) throw new Error('Изделие не найдено');
 
+  const markup = toNumber(data.get('markup_percent'));
+  const price = calculateSalePriceFromCost(calculateProductCost(productId), markup);
   const { error } = await supabase
     .from('products')
     .update({
       min_stock: toNumber(data.get('min_stock')),
-      default_sale_price: toNumber(data.get('default_sale_price')),
+      markup_percent: markup,
+      default_sale_price: price,
     })
     .eq('id', productId)
     .eq('user_id', requireUserId());
@@ -2759,13 +2810,15 @@ async function createProduct(form) {
   const data = new FormData(form);
   const file = data.get('photo');
   const photoPath = file instanceof File && file.size ? await uploadPhoto(file, 'products') : null;
+  const markup = toNumber(data.get('markup_percent'));
 
   const { data: product, error } = await supabase
     .from('products')
     .insert({
       user_id: requireUserId(),
       name: String(data.get('name')).trim(),
-      default_sale_price: toNumber(data.get('default_sale_price')),
+      markup_percent: markup,
+      default_sale_price: 0,
       photo_path: photoPath,
       description: optionalString(data.get('description')),
     })
@@ -2823,28 +2876,49 @@ async function applyMoldToProduct(form) {
   }
 
   await loadWorkspace();
+  await syncProductSalePrice(productId);
+  await loadWorkspace();
   showToast('Расчет применен к изделию');
 }
 
 async function deleteRecipeItem(id) {
+  const row = state.productMaterials.find((item) => item.id === id);
   const { error } = await supabase.from('product_materials').delete().eq('id', id).eq('user_id', requireUserId());
   if (error) throw error;
   await loadWorkspace();
-  showToast('Норма удалена');
+  if (row?.product_id) {
+    await syncProductSalePrice(row.product_id);
+    await loadWorkspace();
+  }
+  showToast('Компонент удален');
 }
 
-async function updateSalePrice(form) {
-  const data = new FormData(form);
-  const productId = String(data.get('product_id'));
-  const price = toNumber(data.get('default_sale_price'));
+async function syncProductSalePrice(productId) {
+  const product = state.products.find((entry) => entry.id === productId);
+  if (!product) return;
+
+  const price = calculateProductSalePrice(product);
   const { error } = await supabase
     .from('products')
     .update({ default_sale_price: price })
     .eq('id', productId)
     .eq('user_id', requireUserId());
   if (error) throw error;
+}
+
+async function updateProductMarkup(form) {
+  const data = new FormData(form);
+  const productId = String(data.get('product_id'));
+  const markup = toNumber(data.get('markup_percent'));
+  const price = calculateSalePriceFromCost(calculateProductCost(productId), markup);
+  const { error } = await supabase
+    .from('products')
+    .update({ markup_percent: markup, default_sale_price: price })
+    .eq('id', productId)
+    .eq('user_id', requireUserId());
+  if (error) throw error;
   await loadWorkspace();
-  showToast('Цена сохранена');
+  showToast('Наценка сохранена');
 }
 
 async function finalizeCalculation(form) {
