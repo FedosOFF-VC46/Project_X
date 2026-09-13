@@ -1458,6 +1458,64 @@ button svg {
   justify-self: end;
 }
 
+.manual-material-card {
+  background: linear-gradient(135deg, var(--ghost), color-mix(in srgb, var(--green) 7%, var(--panel)));
+}
+
+.manual-material-controls {
+  display: grid;
+  grid-template-columns: minmax(160px, 1.1fr) minmax(140px, 0.8fr) minmax(170px, 0.9fr) 112px;
+  gap: 10px;
+  align-items: end;
+}
+
+.manual-material-controls label {
+  min-width: 0;
+}
+
+.manual-material-controls .primary-button {
+  min-height: 48px;
+}
+
+.recipe-preview-strip {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.recipe-preview-strip span {
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 9px 10px;
+  background: var(--panel-muted);
+}
+
+.recipe-preview-strip small,
+.recipe-preview-strip strong {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.recipe-preview-strip small {
+  margin-bottom: 4px;
+  color: var(--muted);
+  font-size: 9px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.recipe-preview-strip strong {
+  color: var(--white);
+  font-size: 13px;
+}
+
+.recipe-preview-strip span:last-child strong {
+  color: var(--green);
+}
+
 .panel {
   min-width: 0;
   padding: 20px;
@@ -3403,6 +3461,10 @@ button svg {
   .nav-list {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
+
+  .manual-material-controls {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 
 @media (max-width: 980px) {
@@ -3491,6 +3553,11 @@ button svg {
 
   .danger-confirm-actions > button {
     flex: 1;
+  }
+
+  .manual-material-controls,
+  .recipe-preview-strip {
+    grid-template-columns: 1fr;
   }
 
   .confirm-card {

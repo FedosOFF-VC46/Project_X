@@ -291,6 +291,7 @@ function render() {
   requestAnimationFrame(() => {
     enhanceSelects();
     document.querySelectorAll('[data-product-pricing-form]').forEach(updateProductPricePreview);
+    document.querySelectorAll('[data-action="add-product-material"]').forEach(updateRecipeFormPreview);
     document.querySelectorAll('.mold-form').forEach(updateMoldComposerPreview);
     syncThemeToggles();
     window.lucide?.createIcons({ attrs: { 'stroke-width': 1.8 } });
@@ -869,6 +870,24 @@ function renderProductStockEditor() {
             <span>Цена продажи</span>
             <strong data-product-price-preview data-cost="${escapeAttr(cost)}">${formatCurrency(price)} / шт</strong>
           </div>
+          <div class="stock-mini">
+            <p class="panel-kicker">Остаток</p>
+            <div class="form-grid">
+              <label>Действие
+                <select name="stock_mode">
+                  <option value="">Без изменения</option>
+                  <option value="receipt">Добавить к складу</option>
+                  <option value="adjustment">Установить остаток</option>
+                </select>
+              </label>
+              <label>Количество
+                <span class="input-with-suffix">
+                  <input name="stock_quantity" type="number" step="1" min="0" placeholder="${formatQty(stock)}" />
+                  <span>шт</span>
+                </span>
+              </label>
+            </div>
+          </div>
           <button class="ghost-button compact" data-view="calculator" type="button">Логистика</button>
           <button class="primary-button" type="submit">Сохранить</button>
         </form>
@@ -1216,6 +1235,7 @@ function renderProductDetail(product) {
         </div>
       </div>
       ${renderMoldApplyPanel(product)}
+      ${renderProductMaterialForm(product)}
       ${renderRecipeTable(product.id)}
     </div>
   `;
@@ -1250,6 +1270,62 @@ function renderMoldApplyPanel(product) {
           </select>
         </label>
         <button class="primary-button compact" type="submit">Применить</button>
+      </div>
+    </form>
+  `;
+}
+
+function renderProductMaterialForm(product) {
+  if (!state.materials.length) {
+    return `
+      <div class="mold-apply-card manual-material-card">
+        <div>
+          <p class="panel-kicker">Дополнительно</p>
+          <h4>Материалов на складе нет</h4>
+        </div>
+        <button class="ghost-button compact" data-view="warehouse" type="button">Открыть склад</button>
+      </div>
+    `;
+  }
+
+  return `
+    <form class="mold-apply-card manual-material-card" data-action="add-product-material">
+      <input type="hidden" name="product_id" value="${product.id}" />
+      <div>
+        <p class="panel-kicker">Дополнительно</p>
+        <h4>Добавить материал</h4>
+      </div>
+      <div class="manual-material-controls">
+        <label>
+          Материал
+          <select name="material_id" data-recipe-material required>
+            <option value="">Выбрать</option>
+            ${state.materials
+              .map((material) => {
+                const unit = UNIT_LABELS[material.unit] ?? material.unit ?? 'ед.';
+                return `<option value="${material.id}" data-unit="${escapeAttr(unit)}" data-price="${escapeAttr(material.unit_price ?? 0)}">${escapeHtml(material.name)} · ${unit}</option>`;
+              })
+              .join('')}
+          </select>
+        </label>
+        <label>
+          Расход на 1 изделие
+          <span class="input-with-suffix">
+            <input name="quantity_per_unit" data-recipe-source type="number" step="0.001" min="0.001" placeholder="2" required />
+            <span data-recipe-unit-suffix>ед.</span>
+          </span>
+        </label>
+        <div class="recipe-preview-strip">
+          <span>
+            <small>Цена</small>
+            <strong data-recipe-price-value>0 ₽ / ед.</strong>
+          </span>
+          <span>
+            <small>В себестоимость</small>
+            <strong data-recipe-cost-value>0 ₽</strong>
+          </span>
+        </div>
+        <button class="primary-button compact" type="submit">Добавить</button>
       </div>
     </form>
   `;
@@ -2823,6 +2899,7 @@ document.addEventListener('submit', async (event) => {
     if (action === 'stock-movement') await createStockMovement(form);
     if (action === 'create-product') await createProduct(form);
     if (action === 'apply-mold-to-product') await applyMoldToProduct(form);
+    if (action === 'add-product-material') await addProductMaterial(form);
     if (action === 'update-product-markup') await updateProductMarkup(form);
     if (action === 'finalize-calculation') await finalizeCalculation(form);
     if (action === 'product-flow-movement') await createProductFlowMovement(form);
@@ -3044,7 +3121,8 @@ async function updateProductStock(form) {
   if (!product) throw new Error('Изделие не найдено');
 
   const markup = toNumber(data.get('markup_percent'));
-  const price = calculateSalePriceFromCost(calculateProductCost(productId), markup);
+  const cost = calculateProductCost(productId);
+  const price = calculateSalePriceFromCost(cost, markup);
   const { error } = await supabase
     .from('products')
     .update({
@@ -3056,16 +3134,109 @@ async function updateProductStock(form) {
     .eq('user_id', requireUserId());
   if (error) throw error;
 
+  const stockMode = String(data.get('stock_mode') ?? '');
+  const stockQuantityRaw = String(data.get('stock_quantity') ?? '').trim();
+  if (stockMode && stockQuantityRaw) {
+    const quantity = toNumber(stockQuantityRaw);
+    const currentStock = getProductStock(product);
+    const quantityDelta = stockMode === 'adjustment' ? quantity - currentStock : quantity;
+    if (quantityDelta !== 0) {
+      if (quantityDelta > 0) {
+        await createManualProductBatch({
+          product,
+          quantity: quantityDelta,
+          costPerUnit: cost,
+          salePricePerUnit: price,
+          movementType: stockMode === 'adjustment' ? 'adjustment' : 'receipt',
+          sourceType: stockMode === 'adjustment' ? 'correction' : 'manual',
+          comment: stockMode === 'adjustment' ? 'Ручная корректировка готового склада' : 'Ручное пополнение готового склада',
+        });
+      } else {
+        await reduceProductBatches({
+          productId,
+          quantity: Math.abs(quantityDelta),
+          comment: 'Ручная корректировка готового склада',
+        });
+      }
+    }
+  }
+
   state.inventory.productEditorOpen = false;
   state.inventory.editingProductId = null;
   await loadWorkspace();
   showToast('Склад продукции обновлен');
 }
 
-async function insertProductStockMovement({ productId, type, sourceType, quantityDelta, comment }) {
+async function createManualProductBatch({ product, quantity, costPerUnit, salePricePerUnit, movementType, sourceType, comment }) {
+  const productId = product.id;
+  const { data: batch, error } = await supabase
+    .from('product_batches')
+    .insert({
+      user_id: requireUserId(),
+      product_id: productId,
+      product_name_snapshot: product.name,
+      total_quantity: quantity,
+      remaining_quantity: quantity,
+      cost_per_unit: costPerUnit,
+      sale_price_per_unit: salePricePerUnit,
+      notes: comment,
+    })
+    .select('id')
+    .single();
+  if (error) throw error;
+
+  await insertProductStockMovement({
+    productId,
+    batchId: batch.id,
+    type: movementType,
+    sourceType,
+    quantityDelta: quantity,
+    comment,
+  });
+}
+
+async function reduceProductBatches({ productId, quantity, comment }) {
+  let rest = quantity;
+  const batches = getProductBatches({ id: productId }, { availableOnly: true });
+
+  for (const batch of batches) {
+    if (rest <= 0) break;
+    const current = toNumber(batch.remaining_quantity);
+    const taken = Math.min(current, rest);
+    const { error } = await supabase
+      .from('product_batches')
+      .update({ remaining_quantity: current - taken })
+      .eq('id', batch.id)
+      .eq('user_id', requireUserId());
+    if (error) throw error;
+
+    await insertProductStockMovement({
+      productId,
+      batchId: batch.id,
+      type: 'adjustment',
+      sourceType: 'correction',
+      quantityDelta: -taken,
+      comment,
+    });
+    rest -= taken;
+  }
+
+  if (rest > 0) {
+    await insertProductStockMovement({
+      productId,
+      type: 'adjustment',
+      sourceType: 'correction',
+      quantityDelta: -rest,
+      comment,
+    });
+  }
+}
+
+async function insertProductStockMovement({ productId, batchId = null, type, sourceType, quantityDelta, comment }) {
   const { error } = await supabase.from('product_stock_movements').insert({
     user_id: requireUserId(),
     product_id: productId,
+    batch_id: batchId,
     movement_type: type,
     source_type: sourceType,
     quantity_delta: quantityDelta,
@@ -3182,6 +3353,49 @@ async function deleteRecipeItem(id) {
     await loadWorkspace();
   }
   showToast('Компонент удален');
+}
+
+async function addProductMaterial(form) {
+  const data = new FormData(form);
+  const productId = String(data.get('product_id'));
+  const materialId = String(data.get('material_id'));
+  const quantity = toNumber(data.get('quantity_per_unit'));
+  const product = state.products.find((entry) => entry.id === productId);
+  const material = state.materials.find((entry) => entry.id === materialId);
+
+  if (!product) throw new Error('Изделие не найдено');
+  if (!material) throw new Error('Выберите материал');
+  if (quantity <= 0) throw new Error('Укажите расход');
+
+  const existing = state.productMaterials.find((row) => row.product_id === productId && row.material_id === materialId);
+  if (existing) {
+    const { error } = await supabase
+      .from('product_materials')
+      .update({
+        quantity_per_unit: quantity,
+        waste_percent: 0,
+        notes: 'Добавлено вручную',
+      })
+      .eq('id', existing.id)
+      .eq('user_id', requireUserId());
+    if (error) throw error;
+  } else {
+    const { error } = await supabase.from('product_materials').insert({
+      user_id: requireUserId(),
+      product_id: productId,
+      material_id: materialId,
+      quantity_per_unit: quantity,
+      waste_percent: 0,
+      notes: 'Добавлено вручную',
+    });
+    if (error) throw error;
+  }
+
+  form.reset();
+  await loadWorkspace();
+  await syncProductSalePrice(productId);
+  await loadWorkspace();
+  showToast(existing ? 'Расход материала обновлен' : 'Материал добавлен к изделию');
 }
 
 async function syncProductSalePrice(productId) {
