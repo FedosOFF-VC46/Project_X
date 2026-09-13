@@ -1301,6 +1301,132 @@ button svg {
   background: linear-gradient(135deg, var(--ghost), color-mix(in srgb, var(--green) 5%, transparent));
 }
 
+.mold-visual {
+  --mold-width: 96px;
+  --mold-depth: 58px;
+  --mold-height: 48px;
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(210px, 0.74fr) minmax(160px, 1fr);
+  gap: 14px;
+  align-items: center;
+  min-height: 132px;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 14px;
+  background:
+    radial-gradient(circle at 30% 35%, color-mix(in srgb, var(--green) 12%, transparent), transparent 36%),
+    var(--panel-muted);
+}
+
+.mold-visual::before {
+  content: "";
+  position: absolute;
+  inset: 14px;
+  border: 1px solid color-mix(in srgb, var(--line) 70%, transparent);
+  border-radius: 8px;
+  opacity: 0.38;
+  transform: skewX(-10deg);
+}
+
+.mold-visual-stage {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  place-items: center;
+  min-height: 102px;
+  perspective: 520px;
+}
+
+.mold-shape {
+  position: relative;
+  width: var(--mold-width);
+  min-width: 52px;
+  height: var(--mold-height);
+  min-height: 30px;
+  transform: rotateX(58deg) rotateZ(-34deg);
+  transform-style: preserve-3d;
+  transition: width 360ms cubic-bezier(.2, .9, .2, 1), height 360ms cubic-bezier(.2, .9, .2, 1), transform 360ms ease;
+}
+
+.mold-face,
+.mold-fill {
+  position: absolute;
+  inset: 0;
+  border: 1px solid color-mix(in srgb, var(--green) 78%, var(--white));
+  border-radius: 10px;
+}
+
+.mold-face-front {
+  background: color-mix(in srgb, var(--green) 8%, transparent);
+  box-shadow: 0 18px 42px color-mix(in srgb, var(--green) 16%, transparent);
+}
+
+.mold-face-top {
+  height: var(--mold-depth);
+  min-height: 26px;
+  background: color-mix(in srgb, var(--green) 12%, transparent);
+  transform: translateY(calc(-1 * var(--mold-depth))) rotateX(72deg);
+  transform-origin: bottom;
+  transition: height 360ms cubic-bezier(.2, .9, .2, 1), transform 360ms cubic-bezier(.2, .9, .2, 1);
+}
+
+.mold-face-side {
+  width: var(--mold-depth);
+  min-width: 26px;
+  background: color-mix(in srgb, var(--green) 6%, transparent);
+  transform: translateX(var(--mold-width)) rotateY(72deg);
+  transform-origin: left;
+  transition: width 360ms cubic-bezier(.2, .9, .2, 1), transform 360ms cubic-bezier(.2, .9, .2, 1);
+}
+
+.mold-fill {
+  inset: 8px;
+  border-color: transparent;
+  background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--green) 34%, transparent), transparent);
+  opacity: 0;
+  transform: translateZ(12px);
+  transition: opacity 260ms ease;
+}
+
+.mold-visual.is-active .mold-fill {
+  opacity: 1;
+  animation: mold-fill-pulse 2.8s ease-in-out infinite;
+}
+
+.mold-dimensions {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.mold-dimensions span {
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 8px 9px;
+  background: var(--ghost);
+  color: var(--white);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+@keyframes mold-fill-pulse {
+  0%,
+  100% {
+    transform: translateZ(12px) translateX(-8%);
+  }
+  50% {
+    transform: translateZ(12px) translateX(8%);
+  }
+}
+
 .mold-size-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -3751,7 +3877,12 @@ button svg {
   }
 
   .mold-size-grid,
-  .mold-live-formula {
+  .mold-live-formula,
+  .mold-visual {
+    grid-template-columns: 1fr;
+  }
+
+  .mold-dimensions {
     grid-template-columns: 1fr;
   }
 

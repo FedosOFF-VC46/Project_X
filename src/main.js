@@ -2103,6 +2103,7 @@ function renderMoldView() {
   const hasGeometry = toNumber(lengthValue) > 0 && toNumber(widthValue) > 0 && toNumber(heightValue) > 0;
   const recommendedValue = editingCalculation?.recommended_volume_ml ?? (editingCalculation && !hasGeometry ? getMoldMainVolume(editingCalculation) : '');
   const finishCoefficientValue = editingCalculation?.finish_coefficient ?? '';
+  const visual = getMoldVisualState(lengthValue, widthValue, heightValue);
 
   return `
     <section class="mold-lab-layout">
@@ -2130,6 +2131,7 @@ function renderMoldView() {
               </div>
               <strong data-mold-base-preview>${formatQty(hasGeometry ? getMoldBaseVolume(editingCalculation) : 0)} мл</strong>
             </div>
+            ${renderMoldVisual(visual)}
             <div class="mold-size-grid">
               <label>Длина
                 <span class="input-with-suffix">
@@ -2153,7 +2155,7 @@ function renderMoldView() {
           </div>
 
           <div class="form-grid">
-            <label>Рекомендовано производителем
+            <label>Объем вручную
               <span class="input-with-suffix">
                 <input name="recommended_volume_ml" type="number" step="0.001" min="0" value="${escapeAttr(recommendedValue)}" placeholder="120" data-mold-source />
                 <span>мл</span>
@@ -2242,6 +2244,26 @@ function renderMoldNoMaterials() {
       <h3>Сырья пока нет</h3>
       <p>Добавьте смолу, пигменты или другие компоненты на склад.</p>
       <button class="primary-button compact" data-view="warehouse" type="button">Открыть склад</button>
+    </div>
+  `;
+}
+
+function renderMoldVisual(visual) {
+  return `
+    <div class="mold-visual" data-mold-visual style="--mold-width: ${visual.boxWidth}; --mold-depth: ${visual.boxDepth}; --mold-height: ${visual.boxHeight};">
+      <div class="mold-visual-stage">
+        <div class="mold-shape" aria-hidden="true">
+          <span class="mold-face mold-face-front"></span>
+          <span class="mold-face mold-face-top"></span>
+          <span class="mold-face mold-face-side"></span>
+          <span class="mold-fill"></span>
+        </div>
+      </div>
+      <div class="mold-dimensions">
+        <span data-mold-dim-length>длина ${visual.length}</span>
+        <span data-mold-dim-width>ширина ${visual.width}</span>
+        <span data-mold-dim-height>высота ${visual.height}</span>
+      </div>
     </div>
   `;
 }
@@ -2639,7 +2661,18 @@ function updateMoldComposerPreview(form) {
   const used = [...unitTotals.entries()].map(([unit, value]) => `${formatQty(value)} ${unit}`).join(' + ') || '0';
   const stockStatus = shortageRows ? `Не хватает: ${shortageRows}` : filledRows ? 'Все есть' : 'Выберите материалы';
   const root = form.closest('.mold-lab-layout');
+  const visual = getMoldVisualState(length, width, height);
+  const visualNode = root?.querySelector('[data-mold-visual]');
 
+  if (visualNode) {
+    visualNode.style.setProperty('--mold-width', visual.boxWidth);
+    visualNode.style.setProperty('--mold-depth', visual.boxDepth);
+    visualNode.style.setProperty('--mold-height', visual.boxHeight);
+    visualNode.classList.toggle('is-active', length > 0 || width > 0 || height > 0);
+  }
+  root?.querySelector('[data-mold-dim-length]')?.replaceChildren(`длина ${visual.length}`);
+  root?.querySelector('[data-mold-dim-width]')?.replaceChildren(`ширина ${visual.width}`);
+  root?.querySelector('[data-mold-dim-height]')?.replaceChildren(`высота ${visual.height}`);
   root?.querySelector('[data-mold-base-preview]')?.replaceChildren(`${formatQty(baseVolume)} мл`);
   root?.querySelector('[data-mold-main-preview]')?.replaceChildren(`${formatQty(mainVolume)} мл`);
   root?.querySelector('[data-mold-finish-preview]')?.replaceChildren(`${formatQty(finishVolume)} мл`);
@@ -2651,6 +2684,25 @@ function updateMoldComposerPreview(form) {
 
 function getMoldItems(calculationId) {
   return state.moldCalculationItems.filter((item) => item.calculation_id === calculationId);
+}
+
+function getMoldVisualState(lengthValue, widthValue, heightValue) {
+  const length = toNumber(lengthValue);
+  const width = toNumber(widthValue);
+  const height = toNumber(heightValue);
+  const max = Math.max(length, width, height, 1);
+  const scale = (value, min = 0.42) => Math.max(min, Math.min(value / max, 1));
+  const x = scale(length || 1);
+  const y = scale(width || 1);
+  const z = scale(height || 1, 0.32);
+  return {
+    boxWidth: `${Math.round(54 + x * 74)}px`,
+    boxDepth: `${Math.round(24 + y * 54)}px`,
+    boxHeight: `${Math.round(30 + z * 46)}px`,
+    length: length > 0 ? `${formatQty(length)} см` : '0 см',
+    width: width > 0 ? `${formatQty(width)} см` : '0 см',
+    height: height > 0 ? `${formatQty(height)} см` : '0 см',
+  };
 }
 
 function getReusableMoldCalculations() {
