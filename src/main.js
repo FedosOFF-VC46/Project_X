@@ -2254,13 +2254,9 @@ function renderMoldVisual(visual) {
       <div class="mold-visual-stage">
         <div class="mold-shape" aria-hidden="true">
           <span class="mold-shadow"></span>
-          <span class="mold-wall mold-wall-back"></span>
-          <span class="mold-wall mold-wall-front"></span>
           <span class="mold-tray"></span>
           <span class="mold-cavity"></span>
           <span class="mold-liquid"></span>
-          <span class="mold-line mold-line-length"></span>
-          <span class="mold-line mold-line-width"></span>
         </div>
       </div>
       <div class="mold-dimensions">
