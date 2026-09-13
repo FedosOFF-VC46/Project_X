@@ -138,6 +138,8 @@ body,
 .data-table,
 .table-head,
 .product-tab,
+.product-category-bar,
+.product-category-tab,
 .thumb,
 .product-portrait,
 input,
@@ -248,38 +250,22 @@ body::before {
 }
 
 .formula-logo {
-  width: 34px;
-  height: 34px;
-  overflow: visible;
+  display: block;
+  width: 38px;
+  height: 38px;
+  border-radius: 11px;
 }
 
-.formula-logo-track,
-.formula-logo-result {
-  fill: none;
-  stroke-linecap: round;
-  stroke-linejoin: round;
+.formula-logo-light {
+  display: none;
 }
 
-.formula-logo-track {
-  stroke-width: 5.8;
+:root[data-theme="light"] .formula-logo-dark {
+  display: none;
 }
 
-.formula-logo-track.is-muted {
-  stroke: color-mix(in srgb, var(--green) 44%, var(--muted));
-  opacity: 0.62;
-}
-
-.formula-logo-track.is-live {
-  stroke: var(--green);
-}
-
-.formula-logo-node {
-  fill: var(--green);
-}
-
-.formula-logo-result {
-  stroke: var(--white);
-  stroke-width: 6.2;
+:root[data-theme="light"] .formula-logo-light {
+  display: block;
 }
 
 .auth-layout {
@@ -694,6 +680,26 @@ select {
   transition: opacity 180ms ease, transform 220ms cubic-bezier(0.16, 1, 0.3, 1);
 }
 
+.select-ui-search {
+  width: 100%;
+  height: 34px;
+  margin-bottom: 6px;
+  border-radius: 7px;
+  padding: 0 10px;
+  background: var(--field);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.select-ui-search::-webkit-search-cancel-button {
+  appearance: none;
+}
+
+.select-ui-options {
+  display: grid;
+  gap: 2px;
+}
+
 .select-ui.is-open .select-ui-menu {
   opacity: 1;
   pointer-events: auto;
@@ -715,6 +721,10 @@ select {
   font-size: 14px;
   font-weight: 800;
   text-align: left;
+}
+
+.select-ui-option[hidden] {
+  display: none;
 }
 
 .select-ui-option:hover {
@@ -2263,6 +2273,10 @@ button svg {
   animation: sheet-in 420ms cubic-bezier(0.16, 1, 0.3, 1);
 }
 
+.material-editor-sheet.small-sheet {
+  width: min(420px, calc(100vw - 48px));
+}
+
 .stock-mini {
   border: 1px solid var(--line);
   border-radius: 8px;
@@ -2361,6 +2375,64 @@ button svg {
 .product-card-grid {
   display: grid;
   gap: 10px;
+}
+
+.product-category-bar {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: flex-start;
+  margin-bottom: 14px;
+  animation: surface-in 360ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.product-category-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  min-width: 0;
+}
+
+.product-category-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 38px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 0 12px;
+  background: var(--panel);
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.product-category-tab:hover {
+  border-color: var(--line-strong);
+  background: var(--ghost-hover);
+  color: var(--white);
+}
+
+.product-category-tab.is-active {
+  border-color: var(--line-strong);
+  background: var(--green);
+  color: var(--primary-text);
+  box-shadow: 0 12px 32px rgba(24, 206, 130, 0.16);
+}
+
+.product-category-tab b {
+  display: grid;
+  min-width: 22px;
+  height: 22px;
+  place-items: center;
+  border-radius: 999px;
+  background: color-mix(in srgb, currentColor 10%, transparent);
+  font-size: 11px;
+}
+
+.product-action-row {
+  display: flex;
+  justify-content: flex-end;
 }
 
 .product-library-card.is-active {
@@ -3630,6 +3702,20 @@ button svg {
   .warehouse-tabs {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
+    width: 100%;
+  }
+
+  .product-category-bar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .product-category-tabs {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .product-category-bar > .ghost-button {
     width: 100%;
   }
 

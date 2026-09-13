@@ -7,6 +7,8 @@ const toastZone = document.querySelector('#toast-zone');
 const canvas = document.querySelector('#resin-scene');
 const THEME_KEY = 'resin-workshop-theme';
 const FORM_DRAFTS_KEY = 'resin-workshop-form-drafts-v1';
+const PRODUCT_CATEGORIES_KEY = 'resin-workshop-product-categories-v1';
+const LABOR_RATE_PER_HOUR = 200;
 
 const state = {
   booted: false,
@@ -27,6 +29,7 @@ const state = {
   moldCalculationItems: [],
   photoUrls: new Map(),
   formDrafts: readFormDrafts(),
+  customProductCategories: readCustomProductCategories(),
   activeProductId: null,
   auth: {
     registrationOpen: false,
@@ -44,6 +47,8 @@ const state = {
   productDesigner: {
     creatorOpen: false,
     duplicatingProductId: null,
+    categoryEditorOpen: false,
+    activeCategory: 'coasters',
   },
   calculator: {
     dialogOpen: false,
@@ -73,6 +78,21 @@ const UNIT_LABELS = {
   g: 'г',
   ml: 'мл',
   pcs: 'шт',
+};
+
+const PRODUCT_CATEGORY_LABELS = {
+  accessories: 'Аксессуары',
+  notebooks: 'Блокноты',
+  coasters: 'Подстаканники',
+  dishes: 'Блюда',
+  christmas: 'Новогодние игрушки',
+  keychains: 'Брелоки',
+};
+
+const MARKUP_SEGMENTS = {
+  cheap: { label: 'Дешевый сегмент', multiplier: 1.2 },
+  middle: { label: 'Средний сегмент', multiplier: 2.2 },
+  luxe: { label: 'Люкс сегмент', multiplier: 3.5 },
 };
 
 const PRODUCT_FLOW_MODES = {
@@ -313,13 +333,30 @@ function writeFormDrafts() {
   }
 }
 
+function readCustomProductCategories() {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(PRODUCT_CATEGORIES_KEY) || '[]');
+    return Array.isArray(parsed) ? parsed.filter((item) => item?.id && item?.label) : [];
+  } catch {
+    return [];
+  }
+}
+
+function writeCustomProductCategories() {
+  try {
+    localStorage.setItem(PRODUCT_CATEGORIES_KEY, JSON.stringify(state.customProductCategories));
+  } catch (error) {
+    console.warn('Category save skipped:', error);
+  }
+}
+
 function getFormDraftKey(form) {
   const action = form?.dataset?.action;
   if (!action || !state.user) return null;
   if (action === 'auth' || action === 'signup') return null;
 
   const parts = [state.user.id, action];
-  ['material_id', 'product_id', 'calculation_id', 'movement_mode', 'duplicate_material_id', 'duplicate_product_id'].forEach((name) => {
+  ['material_id', 'product_id', 'calculation_id', 'movement_mode', 'duplicate_material_id', 'duplicate_product_id', 'product_category'].forEach((name) => {
     const value = form.querySelector(`[name="${name}"]`)?.value;
     if (value) parts.push(`${name}:${value}`);
   });
@@ -419,18 +456,8 @@ function ensureDraftRows(form, draft) {
 function renderBrandMark() {
   return `
     <div class="brand-mark" aria-hidden="true">
-      <svg class="formula-logo" viewBox="0 0 72 72" focusable="false">
-        <path class="formula-logo-track is-muted" d="M15 23H42" />
-        <path class="formula-logo-track is-muted" d="M15 36H42" />
-        <path class="formula-logo-track is-muted" d="M15 49H42" />
-        <path class="formula-logo-track is-live" d="M31 23H46" />
-        <path class="formula-logo-track is-live" d="M31 36H46" />
-        <path class="formula-logo-track is-live" d="M31 49H46" />
-        <circle class="formula-logo-node" cx="31" cy="23" r="2.7" />
-        <circle class="formula-logo-node" cx="31" cy="36" r="2.7" />
-        <circle class="formula-logo-node" cx="31" cy="49" r="2.7" />
-        <path class="formula-logo-result" d="M42 21L47 51L54 34L61 51L66 21" />
-      </svg>
+      <img class="formula-logo formula-logo-dark" src="./assets/logo-dark.svg" alt="" />
+      <img class="formula-logo formula-logo-light" src="./assets/logo-light.svg" alt="" />
     </div>
   `;
 }
@@ -824,6 +851,7 @@ function renderProductStockEditor() {
   const photo = getPhotoUrl(product.photo_path);
   const cost = calculateProductCost(product.id);
   const markup = getProductMarkup(product);
+  const selectedMarkup = getClosestMarkupSegmentKey(product);
   const price = calculateProductSalePrice(product);
   const stock = getProductStock(product);
   return `
@@ -864,8 +892,8 @@ function renderProductStockEditor() {
             <strong>${formatCurrency(price)} / шт</strong>
           </div>
           <div>
-            <span>Наценка</span>
-            <strong>${formatPercent(markup)}</strong>
+            <span>Сегмент</span>
+            <strong>×${formatMultiplier(markupPercentToMultiplier(markup))}</strong>
           </div>
         </div>
         <form class="stack-form" data-action="update-product-stock" data-product-pricing-form>
@@ -877,11 +905,12 @@ function renderProductStockEditor() {
                 <span>шт</span>
               </span>
             </label>
-            <label>Наценка к себестоимости
-              <span class="input-with-suffix">
-                <input name="markup_percent" data-markup-source type="number" step="0.01" min="0" value="${escapeAttr(product.markup_percent ?? 0)}" placeholder="400" />
-                <span>%</span>
-              </span>
+            <label>Сегмент наценки
+              <select name="markup_segment" data-markup-source>
+                ${Object.entries(MARKUP_SEGMENTS)
+                  .map(([key, item]) => `<option value="${key}" ${selectedMarkup === key ? 'selected' : ''}>${item.label} · ×${formatMultiplier(item.multiplier)}</option>`)
+                  .join('')}
+              </select>
             </label>
           </div>
           <div class="unit-price-preview">
@@ -1127,22 +1156,28 @@ function renderMaterialEditor() {
 }
 
 function renderProductsView() {
-  const activeProduct = state.products.find((item) => item.id === state.activeProductId) ?? state.products[0];
+  const activeCategory = getActiveProductCategory();
+  const categoryProducts = getProductsByCategory(activeCategory);
+  const activeProduct =
+    categoryProducts.find((item) => item.id === state.activeProductId) ??
+    categoryProducts[0] ??
+    null;
   if (activeProduct && state.activeProductId !== activeProduct.id) state.activeProductId = activeProduct.id;
 
   return `
+    ${renderProductCategoryTabs(activeCategory)}
     <section class="compact-workspace">
       <div class="panel product-library-panel">
         <div class="panel-head">
           <div>
-            <p class="panel-kicker">Каталог</p>
-            <h2>${state.products.length ? `${state.products.length} ${pluralRu(state.products.length, ['изделие', 'изделия', 'изделий'])}` : 'Изделий нет'}</h2>
+            <p class="panel-kicker">${escapeHtml(getProductCategoryLabel(activeCategory))}</p>
+            <h2>${categoryProducts.length ? `${categoryProducts.length} ${pluralRu(categoryProducts.length, ['изделие', 'изделия', 'изделий'])}` : 'Раздел пуст'}</h2>
           </div>
           <button class="ghost-button compact" data-action="open-product-creator" type="button">Новое изделие</button>
         </div>
         ${
-          state.products.length
-            ? `<div class="product-card-grid">${state.products.map(renderProductLibraryCard).join('')}</div>`
+          categoryProducts.length
+            ? `<div class="product-card-grid">${categoryProducts.map(renderProductLibraryCard).join('')}</div>`
             : renderProductLibraryEmpty()
         }
       </div>
@@ -1165,6 +1200,32 @@ function renderProductsView() {
       </div>
     </section>
     ${state.productDesigner.creatorOpen ? renderProductCreatorDialog() : ''}
+    ${state.productDesigner.categoryEditorOpen ? renderProductCategoryDialog() : ''}
+  `;
+}
+
+function renderProductCategoryTabs(activeCategory) {
+  const categories = getProductCategories();
+  return `
+    <div class="product-category-bar" aria-label="Разделы изделий">
+      <div class="product-category-tabs">
+        ${categories
+          .map((category) => {
+            const count = getProductsByCategory(category.id).length;
+            return `
+              <button class="product-category-tab ${activeCategory === category.id ? 'is-active' : ''}" data-action="set-product-category" data-category="${escapeAttr(category.id)}" type="button">
+                <span>${escapeHtml(category.label)}</span>
+                <b>${count}</b>
+              </button>
+            `;
+          })
+          .join('')}
+      </div>
+      <button class="ghost-button compact" data-action="open-product-category-editor" type="button">
+        <i data-lucide="plus"></i>
+        Раздел
+      </button>
+    </div>
   `;
 }
 
@@ -1172,6 +1233,7 @@ function renderProductLibraryCard(product) {
   const photo = getPhotoUrl(product.photo_path);
   const isActive = state.activeProductId === product.id;
   const cost = calculateProductCost(product.id);
+  const laborCost = calculateProductLaborCost(product);
   const markup = getProductMarkup(product);
   const price = calculateProductSalePrice(product);
   const recipeCount = state.productMaterials.filter((row) => row.product_id === product.id).length;
@@ -1182,7 +1244,7 @@ function renderProductLibraryCard(product) {
         <div class="thumb">${photo ? `<img src="${photo}" alt="" />` : '<i data-lucide="package"></i>'}</div>
         <div class="material-main">
           <h3>${escapeHtml(product.name)}</h3>
-          <p>${recipeCount} ${pluralRu(recipeCount, ['компонент', 'компонента', 'компонентов'])} · ${formatQty(stock)} шт</p>
+          <p>${escapeHtml(getProductCategoryLabel(getProductCategory(product)))} · ${recipeCount} ${pluralRu(recipeCount, ['компонент', 'компонента', 'компонентов'])}</p>
         </div>
         <div class="material-card-facts">
           <span>
@@ -1190,8 +1252,8 @@ function renderProductLibraryCard(product) {
             <strong>${formatCurrency(cost)}</strong>
           </span>
           <span>
-            <small>Наценка</small>
-            <strong>${formatPercent(markup)}</strong>
+            <small>Работа</small>
+            <strong>${formatCurrency(laborCost)}</strong>
           </span>
           <span>
             <small>Цена</small>
@@ -1210,10 +1272,12 @@ function renderProductLibraryCard(product) {
 function renderProductDetail(product) {
   const photo = getPhotoUrl(product.photo_path);
   const cost = calculateProductCost(product.id);
+  const materialCost = calculateProductMaterialCost(product.id);
+  const laborCost = calculateProductLaborCost(product);
   const markup = getProductMarkup(product);
+  const markupAmount = calculateMarkupAmount(cost, markup);
   const price = calculateProductSalePrice(product);
   const stock = getProductStock(product);
-  const recipeCount = state.productMaterials.filter((row) => row.product_id === product.id).length;
   return `
     <div class="product-detail-shell">
       <article class="product-hero-card">
@@ -1223,18 +1287,34 @@ function renderProductDetail(product) {
         <div class="product-hero-body">
           <p class="panel-kicker">Карта изделия</p>
           <h3>${escapeHtml(product.name)}</h3>
-          <span>${escapeHtml(product.description || 'Фото, молд и состав изделия')}</span>
+          <span>${escapeHtml(product.description || 'Фото, раздел, молд и состав изделия')}</span>
         </div>
       </article>
 
       <div class="product-metrics-grid">
+        <div>
+          <span>Раздел</span>
+          <strong>${escapeHtml(getProductCategoryLabel(getProductCategory(product)))}</strong>
+        </div>
+        <div>
+          <span>Материалы</span>
+          <strong>${formatCurrency(materialCost)}</strong>
+        </div>
+        <div>
+          <span>Работа</span>
+          <strong>${formatProductLabor(product)}</strong>
+        </div>
         <div>
           <span>Себестоимость</span>
           <strong>${formatCurrency(cost)} / шт</strong>
         </div>
         <div>
           <span>Наценка</span>
-          <strong>${formatPercent(markup)}</strong>
+          <strong>${formatCurrency(markupAmount)}</strong>
+        </div>
+        <div>
+          <span>Сегмент</span>
+          <strong>×${formatMultiplier(markupPercentToMultiplier(markup))}</strong>
         </div>
         <div>
           <span>Цена продажи</span>
@@ -1244,6 +1324,13 @@ function renderProductDetail(product) {
           <span>На складе</span>
           <strong>${formatQty(stock)} шт</strong>
         </div>
+      </div>
+
+      <div class="product-action-row">
+        <button class="ghost-button compact" data-action="export-product-price" data-product-id="${product.id}" type="button">
+          <i data-lucide="download"></i>
+          Excel
+        </button>
       </div>
 
       <div class="recipe-section-head">
@@ -1353,8 +1440,8 @@ function renderProductLibraryEmpty() {
   return `
     <div class="inventory-empty compact-empty">
       <div class="empty-orb"><i data-lucide="package-plus"></i></div>
-      <h3>Каталог пуст</h3>
-      <p>Добавьте первое изделие и примените к нему сохраненный молд.</p>
+      <h3>В разделе пока пусто</h3>
+      <p>Создайте изделие, примените молд и добавьте материалы под конкретную модель.</p>
       <button class="primary-button compact" data-action="open-product-creator" type="button">Новое изделие</button>
     </div>
   `;
@@ -1363,6 +1450,13 @@ function renderProductLibraryEmpty() {
 function renderProductCreatorDialog() {
   const duplicateProduct = state.products.find((item) => item.id === state.productDesigner.duplicatingProductId);
   const isDuplicate = Boolean(duplicateProduct);
+  const selectedCategory = duplicateProduct ? getProductCategory(duplicateProduct) : getActiveProductCategory();
+  const selectedMarkup = getClosestMarkupSegmentKey(duplicateProduct);
+  const duplicateMaterialCost = duplicateProduct ? calculateProductMaterialCost(duplicateProduct.id) : 0;
+  const initialWorkHours = toNumber(duplicateProduct?.work_hours);
+  const initialMarkup = multiplierToMarkupPercent(MARKUP_SEGMENTS[selectedMarkup].multiplier);
+  const initialCost = duplicateMaterialCost + initialWorkHours * LABOR_RATE_PER_HOUR;
+  const initialPrice = calculateSalePriceFromCost(initialCost, initialMarkup);
   return `
     <section class="material-editor-layer" aria-label="${isDuplicate ? 'Копия изделия' : 'Новое изделие'}">
       <button class="registration-scrim" data-action="close-product-creator" type="button" aria-label="Закрыть"></button>
@@ -1376,19 +1470,62 @@ function renderProductCreatorDialog() {
             <i data-lucide="x"></i>
           </button>
         </div>
-        <form class="stack-form" data-action="create-product">
+        <form class="stack-form" data-action="create-product" data-product-pricing-form>
           <input type="hidden" name="duplicate_product_id" value="${duplicateProduct?.id ?? ''}" />
           <input type="hidden" name="duplicate_photo_path" value="${escapeAttr(duplicateProduct?.photo_path ?? '')}" />
-          <label>Название<input name="name" required value="${escapeAttr(duplicateProduct ? `${duplicateProduct.name} копия` : '')}" placeholder="Подстаканник Wave" /></label>
-          <label>Наценка к себестоимости
-            <span class="input-with-suffix">
-              <input name="markup_percent" type="number" step="0.01" min="0" value="${escapeAttr(duplicateProduct?.markup_percent ?? '')}" placeholder="400" />
-              <span>%</span>
-            </span>
+          <label>Раздел
+            <select name="product_category">
+              ${getProductCategories()
+                .map((category) => `<option value="${escapeAttr(category.id)}" ${selectedCategory === category.id ? 'selected' : ''}>${escapeHtml(category.label)}</option>`)
+                .join('')}
+            </select>
           </label>
+          <label>Название<input name="name" required value="${escapeAttr(duplicateProduct ? `${duplicateProduct.name} копия` : '')}" placeholder="Подстаканник Wave" /></label>
+          <div class="form-grid">
+            <label>Время работы
+              <span class="input-with-suffix">
+                <input name="work_hours" data-product-work-source type="number" step="0.1" min="0" value="${escapeAttr(duplicateProduct?.work_hours ?? '')}" placeholder="1.5" />
+                <span>ч</span>
+              </span>
+            </label>
+            <label>Сегмент наценки
+              <select name="markup_segment" data-markup-source>
+                ${Object.entries(MARKUP_SEGMENTS)
+                  .map(([key, item]) => `<option value="${key}" ${selectedMarkup === key ? 'selected' : ''}>${item.label} · ×${formatMultiplier(item.multiplier)}</option>`)
+                  .join('')}
+              </select>
+            </label>
+          </div>
+          <div class="unit-price-preview">
+            <span>Расчетная цена</span>
+            <strong data-product-price-preview data-material-cost="${escapeAttr(duplicateMaterialCost)}" data-labor-rate="${escapeAttr(LABOR_RATE_PER_HOUR)}">${formatCurrency(initialPrice)} / шт</strong>
+          </div>
           ${renderFilePicker(duplicateProduct?.photo_path)}
           <label>Описание<textarea name="description" rows="3" placeholder="Размер, форма, особенности">${escapeHtml(duplicateProduct?.description ?? '')}</textarea></label>
           <button class="primary-button" type="submit">${isDuplicate ? 'Создать копию' : 'Добавить изделие'}</button>
+        </form>
+      </div>
+    </section>
+  `;
+}
+
+function renderProductCategoryDialog() {
+  return `
+    <section class="material-editor-layer" aria-label="Новый раздел изделий">
+      <button class="registration-scrim" data-action="close-product-category-editor" type="button" aria-label="Закрыть"></button>
+      <div class="material-editor-sheet small-sheet">
+        <div class="sheet-head">
+          <div>
+            <p class="panel-kicker">Раздел</p>
+            <h2>Новый раздел</h2>
+          </div>
+          <button class="icon-button" data-action="close-product-category-editor" type="button" title="Закрыть">
+            <i data-lucide="x"></i>
+          </button>
+        </div>
+        <form class="stack-form" data-action="create-product-category">
+          <label>Название раздела<input name="category_name" required placeholder="Например: Сервировка" /></label>
+          <button class="primary-button" type="submit">Добавить раздел</button>
         </form>
       </div>
     </section>
@@ -1845,6 +1982,7 @@ function renderSalesView() {
 function renderSalesCard(product) {
   const cost = calculateProductCost(product.id);
   const markup = getProductMarkup(product);
+  const selectedMarkup = getClosestMarkupSegmentKey(product);
   const price = calculateProductSalePrice(product);
   const profit = price - cost;
   const photo = getPhotoUrl(product.photo_path);
@@ -1857,7 +1995,7 @@ function renderSalesCard(product) {
         <div class="thumb">${photo ? `<img src="${photo}" alt="" />` : '<i data-lucide="package"></i>'}</div>
         <div>
           <h3>${escapeHtml(product.name)}</h3>
-          <p>${cost > 0 ? `${formatPercent(markup)} наценка` : 'Состав не применен'}</p>
+          <p>${cost > 0 ? `${getProductMarkupTitle(product)} · ×${formatMultiplier(markupPercentToMultiplier(markup))}` : 'Состав не применен'}</p>
         </div>
       </div>
       <div class="sales-numbers">
@@ -1874,11 +2012,12 @@ function renderSalesCard(product) {
       </div>
       <form class="sale-price-form" data-action="update-product-markup" data-product-pricing-form>
         <input type="hidden" name="product_id" value="${product.id}" />
-        <label>Наценка
-          <span class="input-with-suffix">
-            <input name="markup_percent" data-markup-source type="number" step="0.01" min="0" value="${escapeAttr(markup)}" placeholder="400" />
-            <span>%</span>
-          </span>
+        <label>Сегмент
+          <select name="markup_segment" data-markup-source>
+            ${Object.entries(MARKUP_SEGMENTS)
+              .map(([key, item]) => `<option value="${key}" ${selectedMarkup === key ? 'selected' : ''}>${item.label} · ×${formatMultiplier(item.multiplier)}</option>`)
+              .join('')}
+          </select>
         </label>
         <div class="price-inline-preview">
           <span>Цена</span>
@@ -2296,10 +2435,13 @@ function enhanceSelects() {
         <span class="select-ui-value"></span>
         <span class="select-ui-mark" aria-hidden="true"></span>
       </button>
-      <div class="select-ui-menu" role="listbox"></div>
+      <div class="select-ui-menu" role="listbox">
+        <input class="select-ui-search" data-select-search type="search" placeholder="Найти" aria-label="Фильтр списка" />
+        <div class="select-ui-options"></div>
+      </div>
     `;
 
-    const menu = shell.querySelector('.select-ui-menu');
+    const menu = shell.querySelector('.select-ui-options');
     [...select.options].forEach((option) => {
       const item = document.createElement('button');
       item.className = 'select-ui-option';
@@ -2337,6 +2479,13 @@ function closeCustomSelects() {
   document.querySelectorAll('.select-ui.is-open').forEach((shell) => {
     shell.classList.remove('is-open');
     shell.querySelector('[data-select-toggle]')?.setAttribute('aria-expanded', 'false');
+  });
+}
+
+function filterCustomSelect(input) {
+  const query = input.value.trim().toLowerCase();
+  input.closest('.select-ui')?.querySelectorAll('[data-select-option]').forEach((option) => {
+    option.hidden = !option.textContent.toLowerCase().includes(query);
   });
 }
 
@@ -2378,10 +2527,13 @@ function updateRecipeFormPreview(form) {
 
 function updateProductPricePreview(form) {
   if (!form) return;
-  const markup = toNumber(form.querySelector('[name="markup_percent"]')?.value);
+  const markup = getMarkupPercentFromForm(form);
   const preview = form.querySelector('[data-product-price-preview]');
-  const cost = toNumber(preview?.dataset.cost);
   if (!preview) return;
+  const materialCost = preview.dataset.materialCost === undefined ? null : toNumber(preview.dataset.materialCost);
+  const laborRate = toNumber(preview.dataset.laborRate);
+  const workHours = toNumber(form.querySelector('[name="work_hours"]')?.value);
+  const cost = materialCost === null ? toNumber(preview.dataset.cost) : materialCost + workHours * laborRate;
   preview.textContent = `${formatCurrency(calculateSalePriceFromCost(cost, markup))}${preview.closest('.unit-price-preview') ? ' / шт' : ''}`;
 }
 
@@ -2465,7 +2617,7 @@ function getMoldTotalCost(calculation, items = getMoldItems(calculation.id)) {
   return toNumber(calculation.material_cost_total);
 }
 
-function calculateProductCost(productId) {
+function calculateProductMaterialCost(productId) {
   return state.productMaterials
     .filter((row) => row.product_id === productId)
     .reduce((sum, row) => {
@@ -2474,8 +2626,35 @@ function calculateProductCost(productId) {
     }, 0);
 }
 
+function calculateProductLaborCost(productOrId) {
+  const product = typeof productOrId === 'object' ? productOrId : state.products.find((item) => item.id === productOrId);
+  return toNumber(product?.work_hours) * LABOR_RATE_PER_HOUR;
+}
+
+function calculateProductCost(productId) {
+  return calculateProductMaterialCost(productId) + calculateProductLaborCost(productId);
+}
+
 function getProductMarkup(product) {
   return toNumber(product?.markup_percent);
+}
+
+function getMarkupPercentFromForm(form) {
+  const segment = form.querySelector('[name="markup_segment"]')?.value;
+  if (segment && MARKUP_SEGMENTS[segment]) return multiplierToMarkupPercent(MARKUP_SEGMENTS[segment].multiplier);
+  return toNumber(form.querySelector('[name="markup_percent"]')?.value);
+}
+
+function multiplierToMarkupPercent(multiplier) {
+  return Math.max((toNumber(multiplier) - 1) * 100, 0);
+}
+
+function markupPercentToMultiplier(markupPercent) {
+  return 1 + toNumber(markupPercent) / 100;
+}
+
+function calculateMarkupAmount(cost, markupPercent) {
+  return Math.round(cost * (toNumber(markupPercent) / 100) * 100) / 100;
 }
 
 function calculateSalePriceFromCost(cost, markupPercent) {
@@ -2485,6 +2664,138 @@ function calculateSalePriceFromCost(cost, markupPercent) {
 
 function calculateProductSalePrice(product) {
   return calculateSalePriceFromCost(calculateProductCost(product.id), getProductMarkup(product));
+}
+
+function getClosestMarkupSegmentKey(product) {
+  const markup = getProductMarkup(product);
+  if (!product || markup <= 0) return 'middle';
+  const multiplier = markupPercentToMultiplier(markup);
+  return Object.entries(MARKUP_SEGMENTS).reduce((bestKey, [key, item]) => {
+    const bestDiff = Math.abs(MARKUP_SEGMENTS[bestKey].multiplier - multiplier);
+    const nextDiff = Math.abs(item.multiplier - multiplier);
+    return nextDiff < bestDiff ? key : bestKey;
+  }, 'middle');
+}
+
+function formatMultiplier(value) {
+  return new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 1 }).format(toNumber(value));
+}
+
+function formatProductLabor(product) {
+  const hours = toNumber(product?.work_hours);
+  return hours > 0 ? `${formatQty(hours)} ч · ${formatCurrency(calculateProductLaborCost(product))}` : '0 ч';
+}
+
+function getProductCategory(product) {
+  return product?.product_category || 'coasters';
+}
+
+function getProductCategoryLabel(categoryId) {
+  return getProductCategories().find((category) => category.id === categoryId)?.label ?? PRODUCT_CATEGORY_LABELS[categoryId] ?? categoryId;
+}
+
+function getProductCategories() {
+  const categories = new Map(Object.entries(PRODUCT_CATEGORY_LABELS).map(([id, label]) => [id, { id, label }]));
+  state.customProductCategories.forEach((category) => categories.set(category.id, category));
+  state.products.forEach((product) => {
+    const id = getProductCategory(product);
+    if (!categories.has(id)) categories.set(id, { id, label: id });
+  });
+  return [...categories.values()];
+}
+
+function getActiveProductCategory() {
+  const categories = getProductCategories();
+  const active = state.productDesigner.activeCategory;
+  if (categories.some((category) => category.id === active)) return active;
+  state.productDesigner.activeCategory = categories[0]?.id ?? 'coasters';
+  return state.productDesigner.activeCategory;
+}
+
+function getProductsByCategory(categoryId) {
+  return state.products.filter((product) => getProductCategory(product) === categoryId);
+}
+
+function slugifyCategory(label) {
+  return label;
+}
+
+function getProductMarkupTitle(product) {
+  const key = getClosestMarkupSegmentKey(product);
+  return MARKUP_SEGMENTS[key]?.label ?? 'Наценка';
+}
+
+function getProductMaterialRows(productId) {
+  return state.productMaterials
+    .filter((row) => row.product_id === productId)
+    .map((row) => {
+      const material = row.materials ?? state.materials.find((item) => item.id === row.material_id);
+      const unit = UNIT_LABELS[material?.unit] ?? material?.unit ?? '';
+      const quantity = toNumber(row.quantity_per_unit);
+      const unitPrice = toNumber(material?.unit_price);
+      return {
+        name: material?.name ?? 'Материал удален',
+        unit,
+        quantity,
+        unitPrice,
+        total: quantity * unitPrice,
+      };
+    });
+}
+
+function exportProductPrice(productId) {
+  const product = state.products.find((item) => item.id === productId);
+  if (!product) {
+    showToast('Изделие не найдено', 'error');
+    return;
+  }
+
+  const materialRows = getProductMaterialRows(product.id);
+  const materialCost = calculateProductMaterialCost(product.id);
+  const laborCost = calculateProductLaborCost(product);
+  const cost = calculateProductCost(product.id);
+  const markup = getProductMarkup(product);
+  const markupAmount = calculateMarkupAmount(cost, markup);
+  const price = calculateProductSalePrice(product);
+  const rows = [
+    ['Название изделия', product.name, '', '', ''],
+    ['Раздел', getProductCategoryLabel(getProductCategory(product)), '', '', ''],
+    ['Материалы', 'Расход', 'Цена за ед.', 'Сумма', ''],
+    ...materialRows.map((row) => [
+      row.name,
+      `${formatQty(row.quantity)} ${row.unit}`,
+      formatCurrency(row.unitPrice),
+      formatCurrency(row.total),
+      '',
+    ]),
+    ['Материалы всего', '', '', formatCurrency(materialCost), ''],
+    ['Время', `${formatQty(product.work_hours)} ч`, `${formatCurrency(LABOR_RATE_PER_HOUR)} / ч`, formatCurrency(laborCost), ''],
+    ['Стоимость без наценки', '', '', formatCurrency(cost), ''],
+    ['Наценка', getProductMarkupTitle(product), `×${formatMultiplier(markupPercentToMultiplier(markup))}`, formatCurrency(markupAmount), ''],
+    ['Общая стоимость', '', '', formatCurrency(price), ''],
+  ];
+
+  const html = `
+    <html>
+      <head><meta charset="utf-8" /></head>
+      <body>
+        <table border="1">
+          ${rows
+            .map((row) => `<tr>${row.map((cell) => `<td>${escapeHtml(cell)}</td>`).join('')}</tr>`)
+            .join('')}
+        </table>
+      </body>
+    </html>
+  `;
+  const blob = new Blob([html], { type: 'application/vnd.ms-excel;charset=utf-8' });
+  const link = document.createElement('a');
+  link.href = URL.createObjectURL(blob);
+  link.download = `${safeFileName(product.name)}-price.xls`;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  window.setTimeout(() => URL.revokeObjectURL(link.href), 1000);
+  showToast('Прайс выгружен');
 }
 
 function getProductBatches(productId, options = {}) {
@@ -2600,6 +2911,11 @@ document.addEventListener('click', async (event) => {
     const willOpen = !shell?.classList.contains('is-open');
     closeCustomSelects();
     if (shell && willOpen) {
+      const search = shell.querySelector('[data-select-search]');
+      if (search instanceof HTMLInputElement) {
+        search.value = '';
+        filterCustomSelect(search);
+      }
       shell.classList.add('is-open');
       selectToggle.setAttribute('aria-expanded', 'true');
     }
@@ -2716,6 +3032,19 @@ document.addEventListener('click', async (event) => {
     state.productDesigner.duplicatingProductId = null;
     render();
   }
+  if (action === 'set-product-category') {
+    state.productDesigner.activeCategory = actionButton.dataset.category || 'coasters';
+    state.activeProductId = getProductsByCategory(state.productDesigner.activeCategory)[0]?.id ?? null;
+    render();
+  }
+  if (action === 'open-product-category-editor') {
+    state.productDesigner.categoryEditorOpen = true;
+    render();
+  }
+  if (action === 'close-product-category-editor') {
+    state.productDesigner.categoryEditorOpen = false;
+    render();
+  }
   if (action === 'duplicate-product') {
     state.productDesigner.creatorOpen = true;
     state.productDesigner.duplicatingProductId = actionButton.dataset.productId;
@@ -2804,11 +3133,18 @@ document.addEventListener('click', async (event) => {
   if (action === 'delete-recipe-item') {
     await deleteRecipeItem(actionButton.dataset.id);
   }
+  if (action === 'export-product-price') {
+    exportProductPrice(actionButton.dataset.productId);
+  }
 });
 
 document.addEventListener('input', (event) => {
   const target = event.target;
   if (!(target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement || target instanceof HTMLSelectElement)) return;
+  if (target.matches('[data-select-search]')) {
+    filterCustomSelect(target);
+    return;
+  }
   if (target.matches('[data-file-picker]')) {
     const label = target.closest('.file-picker');
     const name = label?.querySelector('[data-file-name]');
@@ -2844,6 +3180,9 @@ document.addEventListener('input', (event) => {
   if (target.matches('[data-markup-source]')) {
     updateProductPricePreview(target.closest('form'));
   }
+  if (target.matches('[data-product-work-source]')) {
+    updateProductPricePreview(target.closest('form'));
+  }
   if (target.matches('[data-mold-material], [data-mold-source], [data-mold-quantity]')) {
     updateMoldComposerPreview(target.closest('form'));
   }
@@ -2876,6 +3215,11 @@ document.addEventListener('keydown', (event) => {
   if (state.productDesigner.creatorOpen) {
     state.productDesigner.creatorOpen = false;
     state.productDesigner.duplicatingProductId = null;
+    render();
+    return;
+  }
+  if (state.productDesigner.categoryEditorOpen) {
+    state.productDesigner.categoryEditorOpen = false;
     render();
     return;
   }
@@ -2916,6 +3260,7 @@ document.addEventListener('submit', async (event) => {
     if (action === 'update-product-stock') await updateProductStock(form);
     if (action === 'stock-movement') await createStockMovement(form);
     if (action === 'create-product') await createProduct(form);
+    if (action === 'create-product-category') createProductCategory(form);
     if (action === 'apply-mold-to-product') await applyMoldToProduct(form);
     if (action === 'add-product-material') await addProductMaterial(form);
     if (action === 'update-product-markup') await updateProductMarkup(form);
@@ -3138,7 +3483,7 @@ async function updateProductStock(form) {
   const product = state.products.find((entry) => entry.id === productId);
   if (!product) throw new Error('Изделие не найдено');
 
-  const markup = toNumber(data.get('markup_percent'));
+  const markup = getMarkupPercentFromForm(form);
   const cost = calculateProductCost(productId);
   const price = calculateSalePriceFromCost(cost, markup);
   const { error } = await supabase
@@ -3268,17 +3613,21 @@ async function createProduct(form) {
   const file = data.get('photo');
   const duplicateProductId = optionalString(data.get('duplicate_product_id'));
   const duplicatePhotoPath = optionalString(data.get('duplicate_photo_path'));
-  const duplicateCost = duplicateProductId ? calculateProductCost(duplicateProductId) : 0;
+  const duplicateMaterialCost = duplicateProductId ? calculateProductMaterialCost(duplicateProductId) : 0;
   const filePhotoPath = file instanceof File && file.size ? await uploadPhoto(file, 'products') : null;
   const photoPath = filePhotoPath ?? duplicatePhotoPath;
-  const markup = toNumber(data.get('markup_percent'));
-  const defaultSalePrice = duplicateProductId ? calculateSalePriceFromCost(duplicateCost, markup) : 0;
+  const markup = getMarkupPercentFromForm(form);
+  const workHours = toNumber(data.get('work_hours'));
+  const defaultSalePrice = calculateSalePriceFromCost(duplicateMaterialCost + workHours * LABOR_RATE_PER_HOUR, markup);
+  const category = optionalString(data.get('product_category')) || getActiveProductCategory();
 
   const { data: product, error } = await supabase
     .from('products')
     .insert({
       user_id: requireUserId(),
       name: String(data.get('name')).trim(),
+      product_category: category,
+      work_hours: workHours,
       markup_percent: markup,
       default_sale_price: defaultSalePrice,
       photo_path: photoPath,
@@ -3307,11 +3656,28 @@ async function createProduct(form) {
 
   state.activeProductId = product.id;
   state.calculator.productId = product.id;
+  state.productDesigner.activeCategory = category;
   state.productDesigner.creatorOpen = false;
   state.productDesigner.duplicatingProductId = null;
   form.reset();
   await loadWorkspace();
   showToast(duplicateProductId ? 'Копия изделия создана' : 'Изделие добавлено');
+}
+
+function createProductCategory(form) {
+  const data = new FormData(form);
+  const label = String(data.get('category_name') ?? '').trim();
+  if (!label) throw new Error('Укажите название раздела');
+  const id = slugifyCategory(label);
+  const exists = getProductCategories().some((category) => category.id === id || category.label.toLowerCase() === label.toLowerCase());
+  if (exists) throw new Error('Такой раздел уже есть');
+
+  state.customProductCategories.push({ id, label });
+  state.productDesigner.activeCategory = id;
+  state.productDesigner.categoryEditorOpen = false;
+  writeCustomProductCategories();
+  form.reset();
+  showToast('Раздел добавлен');
 }
 
 async function applyMoldToProduct(form) {
@@ -3453,7 +3819,7 @@ async function syncProductSalePrice(productId) {
 async function updateProductMarkup(form) {
   const data = new FormData(form);
   const productId = String(data.get('product_id'));
-  const markup = toNumber(data.get('markup_percent'));
+  const markup = getMarkupPercentFromForm(form);
   const price = calculateSalePriceFromCost(calculateProductCost(productId), markup);
   const { error } = await supabase
     .from('products')
@@ -3719,6 +4085,14 @@ function compactFileName(name) {
   const dot = clean.lastIndexOf('.');
   const ext = dot > -1 ? clean.slice(dot) : '';
   return `${clean.slice(0, 18)}...${ext.slice(0, 8)}`;
+}
+
+function safeFileName(name) {
+  return String(name ?? 'product')
+    .trim()
+    .replace(/[\\/:*?"<>|]+/g, '-')
+    .replace(/\s+/g, '-')
+    .slice(0, 80) || 'product';
 }
 
 function formatCurrency(value) {
