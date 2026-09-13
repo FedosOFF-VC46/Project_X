@@ -6,6 +6,7 @@ const app = document.querySelector('#app');
 const toastZone = document.querySelector('#toast-zone');
 const canvas = document.querySelector('#resin-scene');
 const THEME_KEY = 'resin-workshop-theme';
+const FORM_DRAFTS_KEY = 'resin-workshop-form-drafts-v1';
 
 const state = {
   booted: false,
@@ -25,6 +26,7 @@ const state = {
   moldCalculations: [],
   moldCalculationItems: [],
   photoUrls: new Map(),
+  formDrafts: readFormDrafts(),
   activeProductId: null,
   auth: {
     registrationOpen: false,
@@ -282,12 +284,133 @@ async function hydratePhotoUrls() {
 function render() {
   if (!state.booted) return;
   app.innerHTML = state.user ? renderShell() : renderAuth();
+  restoreFormDrafts();
   requestAnimationFrame(() => {
     enhanceSelects();
+    document.querySelectorAll('[data-product-pricing-form]').forEach(updateProductPricePreview);
     document.querySelectorAll('.mold-form').forEach(updateMoldComposerPreview);
     syncThemeToggles();
     window.lucide?.createIcons({ attrs: { 'stroke-width': 1.8 } });
   });
+}
+
+function readFormDrafts() {
+  try {
+    return JSON.parse(localStorage.getItem(FORM_DRAFTS_KEY) || '{}');
+  } catch {
+    return {};
+  }
+}
+
+function writeFormDrafts() {
+  try {
+    localStorage.setItem(FORM_DRAFTS_KEY, JSON.stringify(state.formDrafts));
+  } catch (error) {
+    console.warn('Draft save skipped:', error);
+  }
+}
+
+function getFormDraftKey(form) {
+  const action = form?.dataset?.action;
+  if (!action || !state.user) return null;
+  if (action === 'auth' || action === 'signup') return null;
+
+  const parts = [state.user.id, action];
+  ['material_id', 'product_id', 'calculation_id', 'movement_mode'].forEach((name) => {
+    const value = form.querySelector(`[name="${name}"]`)?.value;
+    if (value) parts.push(`${name}:${value}`);
+  });
+  if (action === 'product-flow-movement' && state.productFlow.productId) {
+    parts.push(`product:${state.productFlow.productId}`);
+  }
+  return parts.join('|');
+}
+
+function serializeFormDraft(form) {
+  const draft = {};
+  Array.from(form.elements).forEach((field) => {
+    if (!(field instanceof HTMLInputElement || field instanceof HTMLTextAreaElement || field instanceof HTMLSelectElement)) return;
+    if (!field.name || field.type === 'file' || field.type === 'password' || field.type === 'hidden') return;
+    if (field instanceof HTMLInputElement && (field.type === 'button' || field.type === 'submit')) return;
+
+    const value = field instanceof HTMLInputElement && field.type === 'checkbox' ? field.checked : field.value;
+    if (draft[field.name] === undefined) {
+      draft[field.name] = value;
+    } else if (Array.isArray(draft[field.name])) {
+      draft[field.name].push(value);
+    } else {
+      draft[field.name] = [draft[field.name], value];
+    }
+  });
+  return draft;
+}
+
+function saveFormDraft(form) {
+  const key = getFormDraftKey(form);
+  if (!key) return;
+  state.formDrafts[key] = serializeFormDraft(form);
+  writeFormDrafts();
+}
+
+function clearFormDraft(form) {
+  const key = getFormDraftKey(form);
+  clearFormDraftByKey(key);
+}
+
+function clearFormDraftByKey(key) {
+  if (!key || !state.formDrafts[key]) return;
+  delete state.formDrafts[key];
+  writeFormDrafts();
+}
+
+function restoreFormDrafts() {
+  document.querySelectorAll('form[data-action]').forEach((form) => {
+    const key = getFormDraftKey(form);
+    const draft = key ? state.formDrafts[key] : null;
+    if (!draft) return;
+    ensureDraftRows(form, draft);
+
+    Object.entries(draft).forEach(([name, savedValue]) => {
+      const fields = Array.from(form.querySelectorAll(`[name="${escapeSelectorValue(name)}"]`));
+      const values = Array.isArray(savedValue) ? savedValue : [savedValue];
+      fields.forEach((field, index) => {
+        if (!(field instanceof HTMLInputElement || field instanceof HTMLTextAreaElement || field instanceof HTMLSelectElement)) return;
+        if (field.type === 'file' || field.type === 'password' || field.type === 'hidden') return;
+        const value = values[Math.min(index, values.length - 1)];
+        if (field instanceof HTMLInputElement && field.type === 'checkbox') {
+          field.checked = Boolean(value);
+        } else {
+          field.value = value ?? '';
+        }
+      });
+    });
+  });
+}
+
+function escapeSelectorValue(value) {
+  if (window.CSS?.escape) return CSS.escape(value);
+  return String(value).replace(/["\\]/g, '\\$&');
+}
+
+function ensureDraftRows(form, draft) {
+  if (form.dataset.action !== 'save-mold-calculation') return;
+  const materialValues = Array.isArray(draft['mold_material_id[]'])
+    ? draft['mold_material_id[]']
+    : draft['mold_material_id[]']
+      ? [draft['mold_material_id[]']]
+      : [];
+  const quantityValues = Array.isArray(draft['mold_quantity[]'])
+    ? draft['mold_quantity[]']
+    : draft['mold_quantity[]']
+      ? [draft['mold_quantity[]']]
+      : [];
+  const neededRows = Math.max(materialValues.length, quantityValues.length, 1);
+  const list = form.querySelector('[data-mold-component-list]');
+  if (!list || !state.materials.length) return;
+
+  while (list.querySelectorAll('[data-mold-row]').length < neededRows) {
+    list.insertAdjacentHTML('beforeend', renderMoldComponentRow(Date.now() + list.children.length));
+  }
 }
 
 function renderAuth() {
@@ -2428,6 +2551,7 @@ document.addEventListener('click', async (event) => {
     requestAnimationFrame(() => {
       enhanceSelects();
       updateMoldComposerPreview(form);
+      saveFormDraft(form);
       window.lucide?.createIcons({ attrs: { 'stroke-width': 1.8 } });
     });
   }
@@ -2445,6 +2569,7 @@ document.addEventListener('click', async (event) => {
       if (select) syncCustomSelect(select);
     }
     updateMoldComposerPreview(form);
+    saveFormDraft(form);
   }
   if (action === 'edit-mold-calculation') {
     state.moldEditor.editingCalculationId = actionButton.dataset.calculationId ?? null;
@@ -2523,6 +2648,13 @@ document.addEventListener('input', (event) => {
   if (target.matches('[data-mold-material], [data-mold-source], [data-mold-quantity]')) {
     updateMoldComposerPreview(target.closest('form'));
   }
+  saveFormDraft(target.closest('form[data-action]'));
+});
+
+document.addEventListener('change', (event) => {
+  const target = event.target;
+  if (!(target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement || target instanceof HTMLSelectElement)) return;
+  saveFormDraft(target.closest('form[data-action]'));
 });
 
 document.addEventListener('keydown', (event) => {
@@ -2571,6 +2703,7 @@ document.addEventListener('submit', async (event) => {
   event.preventDefault();
 
   const action = form.dataset.action;
+  const draftKey = getFormDraftKey(form);
 
   try {
     setBusy(form, true);
@@ -2586,6 +2719,10 @@ document.addEventListener('submit', async (event) => {
     if (action === 'finalize-calculation') await finalizeCalculation(form);
     if (action === 'product-flow-movement') await createProductFlowMovement(form);
     if (action === 'save-mold-calculation') await saveMoldCalculation(form);
+    if (draftKey) {
+      clearFormDraftByKey(draftKey);
+      render();
+    }
   } catch (error) {
     console.warn('Form action failed:', error);
     showToast(toUserMessage(error), 'error');
