@@ -225,8 +225,7 @@ async function loadWorkspace() {
       .from('mold_calculation_items')
       .select('*')
       .eq('user_id', userId)
-      .order('created_at', { ascending: true })
-      .limit(300),
+      .order('created_at', { ascending: true }),
   ]);
 
   const result = [
@@ -3302,7 +3301,7 @@ async function applyMoldToProduct(form) {
   const moldId = String(data.get('mold_calculation_id'));
   const product = state.products.find((entry) => entry.id === productId);
   const mold = state.moldCalculations.find((entry) => entry.id === moldId);
-  const items = mold ? getMoldEditableItems(mold) : [];
+  const items = mold ? groupMoldItemsByMaterial(getMoldEditableItems(mold)) : [];
 
   if (!product) throw new Error('Изделие не найдено');
   if (!mold) throw new Error('Расчет не найден');
@@ -3312,6 +3311,8 @@ async function applyMoldToProduct(form) {
     const materialId = item.material_id;
     const quantity = toNumber(item.quantity);
     const existing = state.productMaterials.find((row) => row.product_id === productId && row.material_id === materialId);
+    const sourceNote = item.sourceRows > 1 ? `, ${item.sourceRows} строки` : '';
+    const notes = `Из расчета: ${mold.title || 'молд'}${sourceNote}`;
 
     if (existing) {
       const { error } = await supabase
@@ -3319,7 +3320,7 @@ async function applyMoldToProduct(form) {
         .update({
           quantity_per_unit: quantity,
           waste_percent: 0,
-          notes: `Из расчета: ${mold.title || 'молд'}`,
+          notes,
         })
         .eq('id', existing.id)
         .eq('user_id', requireUserId());
@@ -3331,7 +3332,7 @@ async function applyMoldToProduct(form) {
         material_id: materialId,
         quantity_per_unit: quantity,
         waste_percent: 0,
-        notes: `Из расчета: ${mold.title || 'молд'}`,
+        notes,
       });
       if (error) throw error;
     }
@@ -3341,6 +3342,25 @@ async function applyMoldToProduct(form) {
   await syncProductSalePrice(productId);
   await loadWorkspace();
   showToast('Расчет применен к изделию');
+}
+
+function groupMoldItemsByMaterial(items) {
+  const grouped = new Map();
+
+  items.forEach((item) => {
+    const materialId = item.material_id;
+    if (!materialId) return;
+    const current = grouped.get(materialId) ?? {
+      ...item,
+      quantity: 0,
+      sourceRows: 0,
+    };
+    current.quantity += toNumber(item.quantity);
+    current.sourceRows += 1;
+    grouped.set(materialId, current);
+  });
+
+  return [...grouped.values()];
 }
 
 async function deleteRecipeItem(id) {
