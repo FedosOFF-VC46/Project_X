@@ -1304,7 +1304,7 @@ button svg {
 .mold-visual {
   --mold-width: 96px;
   --mold-depth: 58px;
-  --mold-height: 48px;
+  --mold-drop: 28px;
   position: relative;
   display: grid;
   grid-template-columns: minmax(220px, 0.78fr) minmax(180px, 1fr);
@@ -1335,64 +1335,119 @@ button svg {
   z-index: 1;
   display: grid;
   place-items: center;
-  min-height: 96px;
+  min-height: 108px;
   perspective: 520px;
 }
 
 .mold-shape {
   position: relative;
   width: var(--mold-width);
-  min-width: 52px;
-  height: var(--mold-height);
-  min-height: 30px;
-  transform: rotateX(58deg) rotateZ(-34deg);
+  min-width: 76px;
+  height: var(--mold-depth);
+  min-height: 42px;
+  transform: rotateX(58deg) rotateZ(-18deg);
   transform-style: preserve-3d;
   transition: width 360ms cubic-bezier(.2, .9, .2, 1), height 360ms cubic-bezier(.2, .9, .2, 1), transform 360ms ease;
 }
 
-.mold-face,
-.mold-fill {
+.mold-shadow,
+.mold-wall,
+.mold-tray,
+.mold-cavity,
+.mold-liquid,
+.mold-line {
   position: absolute;
+  pointer-events: none;
+}
+
+.mold-shadow {
+  inset: 15% 4% -34% 4%;
+  border-radius: 999px;
+  background: radial-gradient(ellipse, color-mix(in srgb, var(--green) 20%, transparent), transparent 66%);
+  filter: blur(8px);
+  transform: translateZ(-22px);
+}
+
+.mold-tray {
   inset: 0;
-  border: 1px solid color-mix(in srgb, var(--green) 78%, var(--white));
-  border-radius: 10px;
+  border: 2px solid color-mix(in srgb, var(--green) 84%, var(--white));
+  border-radius: 26px;
+  background:
+    linear-gradient(135deg, color-mix(in srgb, var(--green) 24%, transparent), transparent 42%),
+    color-mix(in srgb, var(--green) 7%, transparent);
+  box-shadow:
+    inset 0 0 0 9px color-mix(in srgb, var(--panel) 72%, transparent),
+    0 18px 42px color-mix(in srgb, var(--green) 12%, transparent);
 }
 
-.mold-face-front {
-  background: color-mix(in srgb, var(--green) 8%, transparent);
-  box-shadow: 0 18px 42px color-mix(in srgb, var(--green) 16%, transparent);
+.mold-cavity {
+  inset: 17% 13%;
+  border: 1px solid color-mix(in srgb, var(--green) 70%, transparent);
+  border-radius: 20px;
+  background: color-mix(in srgb, var(--green) 5%, transparent);
+  transform: translateZ(10px);
 }
 
-.mold-face-top {
-  height: var(--mold-depth);
-  min-height: 26px;
-  background: color-mix(in srgb, var(--green) 12%, transparent);
-  transform: translateY(calc(-1 * var(--mold-depth))) rotateX(72deg);
-  transform-origin: bottom;
-  transition: height 360ms cubic-bezier(.2, .9, .2, 1), transform 360ms cubic-bezier(.2, .9, .2, 1);
+.mold-wall {
+  right: 9%;
+  left: 9%;
+  height: var(--mold-drop);
+  border-right: 1px solid color-mix(in srgb, var(--green) 70%, transparent);
+  border-left: 1px solid color-mix(in srgb, var(--green) 70%, transparent);
+  background: linear-gradient(180deg, color-mix(in srgb, var(--green) 14%, transparent), transparent);
+  transform-origin: top;
+  transition: height 360ms cubic-bezier(.2, .9, .2, 1);
 }
 
-.mold-face-side {
-  width: var(--mold-depth);
-  min-width: 26px;
-  background: color-mix(in srgb, var(--green) 6%, transparent);
-  transform: translateX(var(--mold-width)) rotateY(72deg);
-  transform-origin: left;
-  transition: width 360ms cubic-bezier(.2, .9, .2, 1), transform 360ms cubic-bezier(.2, .9, .2, 1);
+.mold-wall-front {
+  top: calc(100% - 4px);
+  border-bottom: 1px solid color-mix(in srgb, var(--green) 78%, transparent);
+  border-radius: 0 0 18px 18px;
+  transform: rotateX(-76deg);
 }
 
-.mold-fill {
-  inset: 8px;
-  border-color: transparent;
-  background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--green) 34%, transparent), transparent);
+.mold-wall-back {
+  bottom: calc(100% - 4px);
+  border-top: 1px solid color-mix(in srgb, var(--green) 44%, transparent);
+  border-radius: 18px 18px 0 0;
+  opacity: .36;
+  transform: rotateX(76deg);
+}
+
+.mold-liquid {
+  inset: 23% 18%;
+  border-radius: 999px;
+  background:
+    linear-gradient(90deg, transparent 0%, color-mix(in srgb, var(--green) 34%, transparent) 50%, transparent 100%),
+    color-mix(in srgb, var(--green) 8%, transparent);
   opacity: 0;
-  transform: translateZ(12px);
+  transform: translateZ(18px);
   transition: opacity 260ms ease;
 }
 
-.mold-visual.is-active .mold-fill {
+.mold-visual.is-active .mold-liquid {
   opacity: 1;
   animation: mold-fill-pulse 2.8s ease-in-out infinite;
+}
+
+.mold-line {
+  border-color: color-mix(in srgb, var(--green) 64%, transparent);
+  opacity: .55;
+}
+
+.mold-line-length {
+  right: 5%;
+  bottom: -24px;
+  left: 5%;
+  border-bottom: 1px solid;
+}
+
+.mold-line-width {
+  top: 10%;
+  right: -20px;
+  bottom: 10%;
+  border-right: 1px solid;
+  transform: skewY(28deg);
 }
 
 .mold-dimensions {
@@ -1435,10 +1490,10 @@ button svg {
 @keyframes mold-fill-pulse {
   0%,
   100% {
-    transform: translateZ(12px) translateX(-8%);
+    transform: translateZ(18px) translateX(-6%);
   }
   50% {
-    transform: translateZ(12px) translateX(8%);
+    transform: translateZ(18px) translateX(6%);
   }
 }
 

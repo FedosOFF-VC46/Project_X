@@ -2250,13 +2250,17 @@ function renderMoldNoMaterials() {
 
 function renderMoldVisual(visual) {
   return `
-    <div class="mold-visual" data-mold-visual style="--mold-width: ${visual.boxWidth}; --mold-depth: ${visual.boxDepth}; --mold-height: ${visual.boxHeight};">
+    <div class="mold-visual" data-mold-visual style="--mold-width: ${visual.boxWidth}; --mold-depth: ${visual.boxDepth}; --mold-drop: ${visual.boxDrop};">
       <div class="mold-visual-stage">
         <div class="mold-shape" aria-hidden="true">
-          <span class="mold-face mold-face-front"></span>
-          <span class="mold-face mold-face-top"></span>
-          <span class="mold-face mold-face-side"></span>
-          <span class="mold-fill"></span>
+          <span class="mold-shadow"></span>
+          <span class="mold-wall mold-wall-back"></span>
+          <span class="mold-wall mold-wall-front"></span>
+          <span class="mold-tray"></span>
+          <span class="mold-cavity"></span>
+          <span class="mold-liquid"></span>
+          <span class="mold-line mold-line-length"></span>
+          <span class="mold-line mold-line-width"></span>
         </div>
       </div>
       <div class="mold-dimensions">
@@ -2667,7 +2671,7 @@ function updateMoldComposerPreview(form) {
   if (visualNode) {
     visualNode.style.setProperty('--mold-width', visual.boxWidth);
     visualNode.style.setProperty('--mold-depth', visual.boxDepth);
-    visualNode.style.setProperty('--mold-height', visual.boxHeight);
+    visualNode.style.setProperty('--mold-drop', visual.boxDrop);
     visualNode.classList.toggle('is-active', length > 0 || width > 0 || height > 0);
   }
   root?.querySelector('[data-mold-dim-length]')?.replaceChildren(visual.length);
@@ -2696,9 +2700,9 @@ function getMoldVisualState(lengthValue, widthValue, heightValue) {
   const y = scale(width || 1);
   const z = scale(height || 1, 0.32);
   return {
-    boxWidth: `${Math.round(54 + x * 74)}px`,
-    boxDepth: `${Math.round(24 + y * 54)}px`,
-    boxHeight: `${Math.round(30 + z * 46)}px`,
+    boxWidth: `${Math.round(76 + x * 88)}px`,
+    boxDepth: `${Math.round(42 + y * 60)}px`,
+    boxDrop: `${Math.round(14 + z * 34)}px`,
     length: length > 0 ? `${formatQty(length)} см` : '0 см',
     width: width > 0 ? `${formatQty(width)} см` : '0 см',
     height: height > 0 ? `${formatQty(height)} см` : '0 см',
