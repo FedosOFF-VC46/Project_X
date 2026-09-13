@@ -36,11 +36,13 @@ const state = {
     type: 'raw',
     editorOpen: false,
     editingMaterialId: null,
+    duplicatingMaterialId: null,
     productEditorOpen: false,
     editingProductId: null,
   },
   productDesigner: {
     creatorOpen: false,
+    duplicatingProductId: null,
   },
   calculator: {
     dialogOpen: false,
@@ -316,7 +318,7 @@ function getFormDraftKey(form) {
   if (action === 'auth' || action === 'signup') return null;
 
   const parts = [state.user.id, action];
-  ['material_id', 'product_id', 'calculation_id', 'movement_mode'].forEach((name) => {
+  ['material_id', 'product_id', 'calculation_id', 'movement_mode', 'duplicate_material_id', 'duplicate_product_id'].forEach((name) => {
     const value = form.querySelector(`[name="${name}"]`)?.value;
     if (value) parts.push(`${name}:${value}`);
   });
@@ -754,27 +756,32 @@ function renderProductInventoryItem(product) {
   const cost = calculateProductCost(product.id);
   const price = calculateProductSalePrice(product);
   return `
-    <button class="material-card product-stock-card ${stockTone}" data-action="edit-product-stock" data-product-id="${product.id}" type="button">
-      <div class="thumb">${photo ? `<img src="${photo}" alt="" />` : '<i data-lucide="package"></i>'}</div>
-      <div class="material-main">
-        <h3>${escapeHtml(product.name)}</h3>
-        <p>Готовое изделие · себестоимость ${formatCurrency(cost)}</p>
-      </div>
-      <div class="material-card-facts">
-        <span>
-          <small>На складе</small>
-          <strong>${formatQty(stock)} шт</strong>
-        </span>
-        <span>
-          <small>Минимум</small>
-          <strong>${formatQty(minStock)} шт</strong>
-        </span>
-        <span>
-          <small>Цена</small>
-          <strong>${formatCurrency(price)} / шт</strong>
-        </span>
-      </div>
-    </button>
+    <article class="material-card product-stock-card ${stockTone}">
+      <button class="card-main-action" data-action="edit-product-stock" data-product-id="${product.id}" type="button">
+        <div class="thumb">${photo ? `<img src="${photo}" alt="" />` : '<i data-lucide="package"></i>'}</div>
+        <div class="material-main">
+          <h3>${escapeHtml(product.name)}</h3>
+          <p>Готовое изделие · себестоимость ${formatCurrency(cost)}</p>
+        </div>
+        <div class="material-card-facts">
+          <span>
+            <small>На складе</small>
+            <strong>${formatQty(stock)} шт</strong>
+          </span>
+          <span>
+            <small>Минимум</small>
+            <strong>${formatQty(minStock)} шт</strong>
+          </span>
+          <span>
+            <small>Цена</small>
+            <strong>${formatCurrency(price)} / шт</strong>
+          </span>
+        </div>
+      </button>
+      <button class="quick-copy-button" data-action="duplicate-product" data-product-id="${product.id}" type="button" title="Создать похожее изделие">
+        <i data-lucide="copy-plus"></i>
+      </button>
+    </article>
   `;
 }
 
@@ -873,27 +880,32 @@ function renderMaterialItem(material) {
   const stockTone = toNumber(material.min_stock) > 0 && toNumber(material.current_stock) <= toNumber(material.min_stock) ? 'is-low' : '';
   const unit = UNIT_LABELS[material.unit] ?? material.unit;
   return `
-    <button class="material-card ${stockTone}" data-action="edit-material" data-material-id="${material.id}" type="button">
-      <div class="thumb">${photo ? `<img src="${photo}" alt="" />` : '<i data-lucide="box"></i>'}</div>
-      <div class="material-main">
-        <h3>${escapeHtml(material.name)}</h3>
-        <p>${CATEGORY_LABELS[material.category] ?? material.category}</p>
-      </div>
-      <div class="material-card-facts">
-        <span>
-          <small>На складе</small>
-          <strong>${formatQty(material.current_stock)} ${unit}</strong>
-        </span>
-        <span>
-          <small>Минимум</small>
-          <strong>${formatQty(material.min_stock)} ${unit}</strong>
-        </span>
-        <span>
-          <small>Цена</small>
-          <strong>${formatCurrency(material.unit_price)} / ${unit}</strong>
-        </span>
-      </div>
-    </button>
+    <article class="material-card ${stockTone}">
+      <button class="card-main-action" data-action="edit-material" data-material-id="${material.id}" type="button">
+        <div class="thumb">${photo ? `<img src="${photo}" alt="" />` : '<i data-lucide="box"></i>'}</div>
+        <div class="material-main">
+          <h3>${escapeHtml(material.name)}</h3>
+          <p>${CATEGORY_LABELS[material.category] ?? material.category}</p>
+        </div>
+        <div class="material-card-facts">
+          <span>
+            <small>На складе</small>
+            <strong>${formatQty(material.current_stock)} ${unit}</strong>
+          </span>
+          <span>
+            <small>Минимум</small>
+            <strong>${formatQty(material.min_stock)} ${unit}</strong>
+          </span>
+          <span>
+            <small>Цена</small>
+            <strong>${formatCurrency(material.unit_price)} / ${unit}</strong>
+          </span>
+        </div>
+      </button>
+      <button class="quick-copy-button" data-action="duplicate-material" data-material-id="${material.id}" type="button" title="Создать похожий товар">
+        <i data-lucide="copy-plus"></i>
+      </button>
+    </article>
   `;
 }
 
@@ -910,17 +922,23 @@ function renderInventoryEmpty() {
 
 function renderMaterialEditor() {
   const material = state.materials.find((item) => item.id === state.inventory.editingMaterialId);
+  const duplicateMaterial = !material
+    ? state.materials.find((item) => item.id === state.inventory.duplicatingMaterialId)
+    : null;
+  const source = material ?? duplicateMaterial;
   const isEdit = Boolean(material);
-  const unit = material?.unit ?? 'g';
+  const isDuplicate = Boolean(duplicateMaterial);
+  const unit = source?.unit ?? 'g';
   const unitLabel = UNIT_LABELS[unit] ?? unit;
+  const initialStock = isDuplicate ? duplicateMaterial.package_quantity : '';
   return `
-    <section class="material-editor-layer" aria-label="${isEdit ? 'Редактирование материала' : 'Новый материал'}">
+    <section class="material-editor-layer" aria-label="${isEdit ? 'Редактирование материала' : isDuplicate ? 'Копия материала' : 'Новый материал'}">
       <button class="registration-scrim" data-action="close-material-editor" type="button" aria-label="Закрыть"></button>
       <div class="material-editor-sheet">
         <div class="sheet-head">
           <div>
-            <p class="panel-kicker">${isEdit ? 'Редактирование' : 'Закупка'}</p>
-            <h2>${isEdit ? escapeHtml(material.name) : 'Новый товар'}</h2>
+            <p class="panel-kicker">${isEdit ? 'Редактирование' : isDuplicate ? 'Копия' : 'Закупка'}</p>
+            <h2>${isEdit ? escapeHtml(material.name) : isDuplicate ? 'Похожий товар' : 'Новый товар'}</h2>
           </div>
           <button class="icon-button" data-action="close-material-editor" type="button" title="Закрыть">
             <i data-lucide="x"></i>
@@ -948,9 +966,11 @@ function renderMaterialEditor() {
         }
         <form class="stack-form" data-action="${isEdit ? 'update-material' : 'create-material'}" data-material-form>
           <input type="hidden" name="material_id" value="${material?.id ?? ''}" />
-          <label>Название<input name="name" required value="${escapeAttr(material?.name ?? '')}" placeholder="Смола Crystal" /></label>
+          <input type="hidden" name="duplicate_material_id" value="${duplicateMaterial?.id ?? ''}" />
+          <input type="hidden" name="duplicate_photo_path" value="${escapeAttr(duplicateMaterial?.photo_path ?? '')}" />
+          <label>Название<input name="name" required value="${escapeAttr(source?.name ?? '')}" placeholder="Смола Crystal" /></label>
           <div class="form-grid">
-            <label>Тип${renderSelect('category', CATEGORY_LABELS, material?.category ?? 'material')}</label>
+            <label>Тип${renderSelect('category', CATEGORY_LABELS, source?.category ?? 'material')}</label>
             <label>Единица учета
               <select name="unit" data-material-unit-select>
                 ${Object.entries(UNIT_LABELS)
@@ -962,20 +982,20 @@ function renderMaterialEditor() {
           <div class="form-grid">
             <label>Цена упаковки
               <span class="input-with-suffix">
-                <input name="package_cost" data-material-price-source type="number" step="0.01" min="0" required value="${escapeAttr(material?.package_cost ?? '')}" placeholder="2500" />
+                <input name="package_cost" data-material-price-source type="number" step="0.01" min="0" required value="${escapeAttr(source?.package_cost ?? '')}" placeholder="2500" />
                 <span>₽</span>
               </span>
             </label>
             <label>Количество в упаковке
               <span class="input-with-suffix">
-                <input name="package_quantity" data-material-price-source type="number" step="0.001" min="0.001" required value="${escapeAttr(material?.package_quantity ?? '')}" placeholder="1000" />
+                <input name="package_quantity" data-material-price-source type="number" step="0.001" min="0.001" required value="${escapeAttr(source?.package_quantity ?? '')}" placeholder="1000" />
                 <span data-unit-suffix>${unitLabel}</span>
               </span>
             </label>
           </div>
           <div class="unit-price-preview">
             <span data-unit-price-label>Цена за ${unitLabel}</span>
-            <strong data-unit-price-value>${formatCurrency(material?.unit_price ?? 0)}</strong>
+            <strong data-unit-price-value>${formatCurrency(source?.unit_price ?? 0)}</strong>
           </div>
           <div class="form-grid">
             ${
@@ -988,21 +1008,21 @@ function renderMaterialEditor() {
                   </label>`
                 : `<label>На складе сейчас
                     <span class="input-with-suffix">
-                      <input name="initial_stock" type="number" step="0.001" min="0" placeholder="1000" />
+                      <input name="initial_stock" type="number" step="0.001" min="0" value="${escapeAttr(initialStock)}" placeholder="1000" />
                       <span data-unit-suffix>${unitLabel}</span>
                     </span>
                   </label>
                   <label>Минимум на складе
                     <span class="input-with-suffix">
-                      <input name="min_stock" type="number" step="0.001" min="0" placeholder="150" />
+                      <input name="min_stock" type="number" step="0.001" min="0" value="${escapeAttr(source?.min_stock ?? '')}" placeholder="150" />
                       <span data-unit-suffix>${unitLabel}</span>
                     </span>
                   </label>`
             }
           </div>
-          ${renderFilePicker()}
-          <label>Где покупали / ссылка<input name="purchase_url" type="url" value="${escapeAttr(material?.purchase_url ?? '')}" placeholder="Ссылка на магазин" /></label>
-          <label>Примечание<textarea name="notes" rows="3" placeholder="Любая полезная заметка">${escapeHtml(material?.notes ?? '')}</textarea></label>
+          ${renderFilePicker(source?.photo_path)}
+          <label>Где покупали / ссылка<input name="purchase_url" type="url" value="${escapeAttr(source?.purchase_url ?? '')}" placeholder="Ссылка на магазин" /></label>
+          <label>Примечание<textarea name="notes" rows="3" placeholder="Любая полезная заметка">${escapeHtml(source?.notes ?? '')}</textarea></label>
           ${
             isEdit
               ? `
@@ -1027,7 +1047,7 @@ function renderMaterialEditor() {
               `
               : ''
           }
-          <button class="primary-button" type="submit">${isEdit ? 'Сохранить' : 'Добавить товар'}</button>
+          <button class="primary-button" type="submit">${isEdit ? 'Сохранить' : isDuplicate ? 'Создать копию' : 'Добавить товар'}</button>
         </form>
       </div>
     </section>
@@ -1085,27 +1105,32 @@ function renderProductLibraryCard(product) {
   const recipeCount = state.productMaterials.filter((row) => row.product_id === product.id).length;
   const stock = getProductStock(product);
   return `
-    <button class="material-card product-library-card ${isActive ? 'is-active' : ''}" data-action="select-product" data-product-id="${product.id}" type="button">
-      <div class="thumb">${photo ? `<img src="${photo}" alt="" />` : '<i data-lucide="package"></i>'}</div>
-      <div class="material-main">
-        <h3>${escapeHtml(product.name)}</h3>
-        <p>${recipeCount} ${pluralRu(recipeCount, ['компонент', 'компонента', 'компонентов'])} · ${formatQty(stock)} шт</p>
-      </div>
-      <div class="material-card-facts">
-        <span>
-          <small>Себестоимость</small>
-          <strong>${formatCurrency(cost)}</strong>
-        </span>
-        <span>
-          <small>Наценка</small>
-          <strong>${formatPercent(markup)}</strong>
-        </span>
-        <span>
-          <small>Цена</small>
-          <strong>${formatCurrency(price)}</strong>
-        </span>
-      </div>
-    </button>
+    <article class="material-card product-library-card ${isActive ? 'is-active' : ''}">
+      <button class="card-main-action" data-action="select-product" data-product-id="${product.id}" type="button">
+        <div class="thumb">${photo ? `<img src="${photo}" alt="" />` : '<i data-lucide="package"></i>'}</div>
+        <div class="material-main">
+          <h3>${escapeHtml(product.name)}</h3>
+          <p>${recipeCount} ${pluralRu(recipeCount, ['компонент', 'компонента', 'компонентов'])} · ${formatQty(stock)} шт</p>
+        </div>
+        <div class="material-card-facts">
+          <span>
+            <small>Себестоимость</small>
+            <strong>${formatCurrency(cost)}</strong>
+          </span>
+          <span>
+            <small>Наценка</small>
+            <strong>${formatPercent(markup)}</strong>
+          </span>
+          <span>
+            <small>Цена</small>
+            <strong>${formatCurrency(price)}</strong>
+          </span>
+        </div>
+      </button>
+      <button class="quick-copy-button" data-action="duplicate-product" data-product-id="${product.id}" type="button" title="Создать похожее изделие">
+        <i data-lucide="copy-plus"></i>
+      </button>
+    </article>
   `;
 }
 
@@ -1206,30 +1231,34 @@ function renderProductLibraryEmpty() {
 }
 
 function renderProductCreatorDialog() {
+  const duplicateProduct = state.products.find((item) => item.id === state.productDesigner.duplicatingProductId);
+  const isDuplicate = Boolean(duplicateProduct);
   return `
-    <section class="material-editor-layer" aria-label="Новое изделие">
+    <section class="material-editor-layer" aria-label="${isDuplicate ? 'Копия изделия' : 'Новое изделие'}">
       <button class="registration-scrim" data-action="close-product-creator" type="button" aria-label="Закрыть"></button>
       <div class="material-editor-sheet">
         <div class="sheet-head">
           <div>
-            <p class="panel-kicker">Изделие</p>
-            <h2>Новая карта</h2>
+            <p class="panel-kicker">${isDuplicate ? 'Копия' : 'Изделие'}</p>
+            <h2>${isDuplicate ? 'Похожая карта' : 'Новая карта'}</h2>
           </div>
           <button class="icon-button" data-action="close-product-creator" type="button" title="Закрыть">
             <i data-lucide="x"></i>
           </button>
         </div>
         <form class="stack-form" data-action="create-product">
-          <label>Название<input name="name" required placeholder="Подстаканник Wave" /></label>
+          <input type="hidden" name="duplicate_product_id" value="${duplicateProduct?.id ?? ''}" />
+          <input type="hidden" name="duplicate_photo_path" value="${escapeAttr(duplicateProduct?.photo_path ?? '')}" />
+          <label>Название<input name="name" required value="${escapeAttr(duplicateProduct ? `${duplicateProduct.name} копия` : '')}" placeholder="Подстаканник Wave" /></label>
           <label>Наценка к себестоимости
             <span class="input-with-suffix">
-              <input name="markup_percent" type="number" step="0.01" min="0" placeholder="400" />
+              <input name="markup_percent" type="number" step="0.01" min="0" value="${escapeAttr(duplicateProduct?.markup_percent ?? '')}" placeholder="400" />
               <span>%</span>
             </span>
           </label>
-          ${renderFilePicker()}
-          <label>Описание<textarea name="description" rows="3" placeholder="Размер, форма, особенности"></textarea></label>
-          <button class="primary-button" type="submit">Добавить изделие</button>
+          ${renderFilePicker(duplicateProduct?.photo_path)}
+          <label>Описание<textarea name="description" rows="3" placeholder="Размер, форма, особенности">${escapeHtml(duplicateProduct?.description ?? '')}</textarea></label>
+          <button class="primary-button" type="submit">${isDuplicate ? 'Создать копию' : 'Добавить изделие'}</button>
         </form>
       </div>
     </section>
@@ -2099,16 +2128,17 @@ function renderSelect(name, options, selectedValue = '') {
   `;
 }
 
-function renderFilePicker() {
+function renderFilePicker(currentPhotoPath = '') {
+  const photo = getPhotoUrl(currentPhotoPath);
   return `
     <label class="file-picker">
       <span>Фото</span>
       <input name="photo" type="file" accept="image/*" data-file-picker />
-      <span class="file-picker-box">
-        <span class="file-picker-preview" data-file-preview></span>
+      <span class="file-picker-box ${photo ? 'is-selected' : ''}">
+        <span class="file-picker-preview" data-file-preview ${photo ? `style="background-image: url('${escapeAttr(photo)}')"` : ''}></span>
         <span class="file-picker-copy">
           <span class="file-picker-title">Выбрать фото</span>
-          <span class="file-picker-name" data-file-name>Файл не выбран</span>
+          <span class="file-picker-name" data-file-name>${photo ? 'Фото скопировано' : 'Файл не выбран'}</span>
         </span>
       </span>
     </label>
@@ -2490,6 +2520,7 @@ document.addEventListener('click', async (event) => {
     state.inventory.type = actionButton.dataset.warehouse === 'products' ? 'products' : 'raw';
     state.inventory.editorOpen = false;
     state.inventory.editingMaterialId = null;
+    state.inventory.duplicatingMaterialId = null;
     state.inventory.productEditorOpen = false;
     state.inventory.editingProductId = null;
     render();
@@ -2497,16 +2528,26 @@ document.addEventListener('click', async (event) => {
   if (action === 'open-material-editor') {
     state.inventory.editorOpen = true;
     state.inventory.editingMaterialId = null;
+    state.inventory.duplicatingMaterialId = null;
     render();
   }
   if (action === 'edit-material') {
     state.inventory.editorOpen = true;
     state.inventory.editingMaterialId = actionButton.dataset.materialId;
+    state.inventory.duplicatingMaterialId = null;
+    render();
+  }
+  if (action === 'duplicate-material') {
+    state.inventory.type = 'raw';
+    state.inventory.editorOpen = true;
+    state.inventory.editingMaterialId = null;
+    state.inventory.duplicatingMaterialId = actionButton.dataset.materialId;
     render();
   }
   if (action === 'close-material-editor') {
     state.inventory.editorOpen = false;
     state.inventory.editingMaterialId = null;
+    state.inventory.duplicatingMaterialId = null;
     render();
   }
   if (action === 'edit-product-stock') {
@@ -2521,10 +2562,17 @@ document.addEventListener('click', async (event) => {
   }
   if (action === 'open-product-creator') {
     state.productDesigner.creatorOpen = true;
+    state.productDesigner.duplicatingProductId = null;
+    render();
+  }
+  if (action === 'duplicate-product') {
+    state.productDesigner.creatorOpen = true;
+    state.productDesigner.duplicatingProductId = actionButton.dataset.productId;
     render();
   }
   if (action === 'close-product-creator') {
     state.productDesigner.creatorOpen = false;
+    state.productDesigner.duplicatingProductId = null;
     render();
   }
   if (action === 'open-calculation-dialog') {
@@ -2676,6 +2724,7 @@ document.addEventListener('keydown', (event) => {
   }
   if (state.productDesigner.creatorOpen) {
     state.productDesigner.creatorOpen = false;
+    state.productDesigner.duplicatingProductId = null;
     render();
     return;
   }
@@ -2688,6 +2737,7 @@ document.addEventListener('keydown', (event) => {
   if (state.inventory.editorOpen) {
     state.inventory.editorOpen = false;
     state.inventory.editingMaterialId = null;
+    state.inventory.duplicatingMaterialId = null;
     render();
     return;
   }
@@ -2779,7 +2829,8 @@ async function createMaterial(form) {
   const packageQuantity = toNumber(data.get('package_quantity'));
   const initialStock = toNumber(data.get('initial_stock'));
   const file = data.get('photo');
-  const photoPath = file instanceof File && file.size ? await uploadPhoto(file, 'materials') : null;
+  const duplicatePhotoPath = optionalString(data.get('duplicate_photo_path'));
+  const photoPath = file instanceof File && file.size ? await uploadPhoto(file, 'materials') : duplicatePhotoPath;
 
   const { data: material, error } = await supabase
     .from('materials')
@@ -2813,6 +2864,7 @@ async function createMaterial(form) {
   form.reset();
   state.inventory.editorOpen = false;
   state.inventory.editingMaterialId = null;
+  state.inventory.duplicatingMaterialId = null;
   await loadWorkspace();
   showToast('Материал добавлен');
 }
@@ -2946,8 +2998,13 @@ async function insertProductStockMovement({ productId, type, sourceType, quantit
 async function createProduct(form) {
   const data = new FormData(form);
   const file = data.get('photo');
-  const photoPath = file instanceof File && file.size ? await uploadPhoto(file, 'products') : null;
+  const duplicateProductId = optionalString(data.get('duplicate_product_id'));
+  const duplicatePhotoPath = optionalString(data.get('duplicate_photo_path'));
+  const duplicateCost = duplicateProductId ? calculateProductCost(duplicateProductId) : 0;
+  const filePhotoPath = file instanceof File && file.size ? await uploadPhoto(file, 'products') : null;
+  const photoPath = filePhotoPath ?? duplicatePhotoPath;
   const markup = toNumber(data.get('markup_percent'));
+  const defaultSalePrice = duplicateProductId ? calculateSalePriceFromCost(duplicateCost, markup) : 0;
 
   const { data: product, error } = await supabase
     .from('products')
@@ -2955,7 +3012,7 @@ async function createProduct(form) {
       user_id: requireUserId(),
       name: String(data.get('name')).trim(),
       markup_percent: markup,
-      default_sale_price: 0,
+      default_sale_price: defaultSalePrice,
       photo_path: photoPath,
       description: optionalString(data.get('description')),
     })
@@ -2963,12 +3020,30 @@ async function createProduct(form) {
     .single();
   if (error) throw error;
 
+  if (duplicateProductId) {
+    const sourceRows = state.productMaterials.filter((row) => row.product_id === duplicateProductId);
+    if (sourceRows.length) {
+      const { error: copyError } = await supabase.from('product_materials').insert(
+        sourceRows.map((row) => ({
+          user_id: requireUserId(),
+          product_id: product.id,
+          material_id: row.material_id,
+          quantity_per_unit: row.quantity_per_unit,
+          waste_percent: 0,
+          notes: row.notes,
+        })),
+      );
+      if (copyError) throw copyError;
+    }
+  }
+
   state.activeProductId = product.id;
   state.calculator.productId = product.id;
   state.productDesigner.creatorOpen = false;
+  state.productDesigner.duplicatingProductId = null;
   form.reset();
   await loadWorkspace();
-  showToast('Изделие добавлено');
+  showToast(duplicateProductId ? 'Копия изделия создана' : 'Изделие добавлено');
 }
 
 async function applyMoldToProduct(form) {

@@ -1789,6 +1789,7 @@ button svg {
 }
 
 .material-card {
+  position: relative;
   display: grid;
   grid-template-columns: 58px minmax(0, 1fr);
   gap: 12px;
@@ -1801,6 +1802,20 @@ button svg {
   text-align: left;
   box-shadow: none;
   animation: card-in 360ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.card-main-action {
+  all: unset;
+  display: grid;
+  grid-column: 1 / -1;
+  grid-template-columns: 58px minmax(0, 1fr);
+  gap: 12px;
+  min-width: 0;
+  cursor: pointer;
+}
+
+.card-main-action:focus-visible {
+  outline: none;
 }
 
 .material-card:hover {
@@ -1816,8 +1831,51 @@ button svg {
   box-shadow: 0 0 0 4px rgba(101, 255, 192, 0.12);
 }
 
+.material-card:has(.card-main-action:focus-visible) {
+  border-color: var(--green);
+  box-shadow: 0 0 0 4px rgba(101, 255, 192, 0.12);
+}
+
 .material-card.is-low {
   border-color: rgba(240, 195, 107, 0.5);
+}
+
+.quick-copy-button {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  z-index: 2;
+  display: grid;
+  width: 34px;
+  height: 34px;
+  place-items: center;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--panel) 84%, transparent);
+  color: var(--green);
+  box-shadow: 0 10px 22px rgba(0, 0, 0, 0.1);
+  opacity: 0.72;
+  transform: translateY(0) scale(0.96);
+  transition:
+    opacity 180ms ease,
+    transform 180ms ease,
+    border-color 180ms ease,
+    background 180ms ease;
+}
+
+.quick-copy-button:hover,
+.quick-copy-button:focus-visible {
+  border-color: var(--line-strong);
+  background: var(--green);
+  color: #00150d;
+  opacity: 1;
+  outline: none;
+  transform: translateY(-1px) scale(1);
+}
+
+.quick-copy-button svg {
+  width: 17px;
+  height: 17px;
 }
 
 .material-card .thumb {
@@ -1827,6 +1885,7 @@ button svg {
 
 .material-main {
   min-width: 0;
+  padding-right: 38px;
 }
 
 .material-main h3 {
