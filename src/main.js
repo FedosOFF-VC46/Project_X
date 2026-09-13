@@ -779,7 +779,8 @@ function renderProductInventoryItem(product) {
         </div>
       </button>
       <button class="quick-copy-button" data-action="duplicate-product" data-product-id="${product.id}" type="button" title="Создать похожее изделие">
-        <i data-lucide="copy-plus"></i>
+        <i data-lucide="copy"></i>
+        <span>Дубль</span>
       </button>
     </article>
   `;
@@ -903,7 +904,8 @@ function renderMaterialItem(material) {
         </div>
       </button>
       <button class="quick-copy-button" data-action="duplicate-material" data-material-id="${material.id}" type="button" title="Создать похожий товар">
-        <i data-lucide="copy-plus"></i>
+        <i data-lucide="copy"></i>
+        <span>Дубль</span>
       </button>
     </article>
   `;
@@ -1128,7 +1130,8 @@ function renderProductLibraryCard(product) {
         </div>
       </button>
       <button class="quick-copy-button" data-action="duplicate-product" data-product-id="${product.id}" type="button" title="Создать похожее изделие">
-        <i data-lucide="copy-plus"></i>
+        <i data-lucide="copy"></i>
+        <span>Дубль</span>
       </button>
     </article>
   `;
