@@ -2260,9 +2260,9 @@ function renderMoldVisual(visual) {
         </div>
       </div>
       <div class="mold-dimensions">
-        <span data-mold-dim-length>длина ${visual.length}</span>
-        <span data-mold-dim-width>ширина ${visual.width}</span>
-        <span data-mold-dim-height>высота ${visual.height}</span>
+        <span><small>Длина</small><b data-mold-dim-length>${visual.length}</b></span>
+        <span><small>Ширина</small><b data-mold-dim-width>${visual.width}</b></span>
+        <span><small>Высота</small><b data-mold-dim-height>${visual.height}</b></span>
       </div>
     </div>
   `;
@@ -2670,9 +2670,9 @@ function updateMoldComposerPreview(form) {
     visualNode.style.setProperty('--mold-height', visual.boxHeight);
     visualNode.classList.toggle('is-active', length > 0 || width > 0 || height > 0);
   }
-  root?.querySelector('[data-mold-dim-length]')?.replaceChildren(`длина ${visual.length}`);
-  root?.querySelector('[data-mold-dim-width]')?.replaceChildren(`ширина ${visual.width}`);
-  root?.querySelector('[data-mold-dim-height]')?.replaceChildren(`высота ${visual.height}`);
+  root?.querySelector('[data-mold-dim-length]')?.replaceChildren(visual.length);
+  root?.querySelector('[data-mold-dim-width]')?.replaceChildren(visual.width);
+  root?.querySelector('[data-mold-dim-height]')?.replaceChildren(visual.height);
   root?.querySelector('[data-mold-base-preview]')?.replaceChildren(`${formatQty(baseVolume)} мл`);
   root?.querySelector('[data-mold-main-preview]')?.replaceChildren(`${formatQty(mainVolume)} мл`);
   root?.querySelector('[data-mold-finish-preview]')?.replaceChildren(`${formatQty(finishVolume)} мл`);

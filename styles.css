@@ -1307,10 +1307,10 @@ button svg {
   --mold-height: 48px;
   position: relative;
   display: grid;
-  grid-template-columns: minmax(210px, 0.74fr) minmax(160px, 1fr);
-  gap: 14px;
+  grid-template-columns: minmax(220px, 0.78fr) minmax(180px, 1fr);
+  gap: 16px;
   align-items: center;
-  min-height: 132px;
+  min-height: 124px;
   overflow: hidden;
   border: 1px solid var(--line);
   border-radius: 10px;
@@ -1323,11 +1323,11 @@ button svg {
 .mold-visual::before {
   content: "";
   position: absolute;
-  inset: 14px;
+  inset: 14px 18px;
   border: 1px solid color-mix(in srgb, var(--line) 70%, transparent);
   border-radius: 8px;
   opacity: 0.38;
-  transform: skewX(-10deg);
+  transform: skewX(-8deg);
 }
 
 .mold-visual-stage {
@@ -1335,7 +1335,7 @@ button svg {
   z-index: 1;
   display: grid;
   place-items: center;
-  min-height: 102px;
+  min-height: 96px;
   perspective: 520px;
 }
 
@@ -1404,17 +1404,32 @@ button svg {
 }
 
 .mold-dimensions span {
-  overflow: hidden;
+  display: grid;
+  gap: 3px;
   border: 1px solid var(--line);
   border-radius: 8px;
   padding: 8px 9px;
   background: var(--ghost);
+}
+
+.mold-dimensions small {
+  overflow: hidden;
+  color: var(--muted);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 9px;
+  font-weight: 900;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+}
+
+.mold-dimensions b {
+  overflow: hidden;
   color: var(--white);
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 11px;
+  font-size: 14px;
   font-weight: 900;
-  text-transform: uppercase;
 }
 
 @keyframes mold-fill-pulse {
