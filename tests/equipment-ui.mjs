@@ -82,6 +82,18 @@ const noOverflow = async () => {
   assert.ok(result.scroll <= result.width + 1, JSON.stringify(result));
   assert.ok(result.dialogs.every((el) => el.scroll <= el.width + 1), JSON.stringify(result));
 };
+const compactFilters = async () => {
+  await page.locator('.warehouse-filter-selects .select-ui-button').first().waitFor();
+  const measurements = await page.locator('.warehouse-filters').evaluate((panel) => {
+    const search = panel.querySelector('input[type="search"]').getBoundingClientRect();
+    const selects = panel.querySelector('.warehouse-filter-selects').getBoundingClientRect();
+    const styles = getComputedStyle(panel);
+    return { gap: selects.top - search.bottom, panelHeight: panel.getBoundingClientRect().height,
+      contentHeight: search.height + selects.height + parseFloat(styles.rowGap) + parseFloat(styles.paddingTop) + parseFloat(styles.paddingBottom) + parseFloat(styles.borderTopWidth) + parseFloat(styles.borderBottomWidth) };
+  });
+  assert.ok(measurements.gap >= 0 && measurements.gap <= 16, JSON.stringify(measurements));
+  assert.ok(Math.abs(measurements.panelHeight - measurements.contentHeight) <= 2, JSON.stringify(measurements));
+};
 
 try {
   await page.goto(process.env.APP_URL || 'http://127.0.0.1:4174/');
@@ -90,6 +102,12 @@ try {
   assert.equal(await page.locator('[data-warehouse-results] .material-card').count(), 1);
   assert.equal(await page.locator('[data-warehouse-filter="query"]').inputValue(), 'Смола');
   assert.equal(await page.locator('[data-warehouse-filter="query"]').evaluate((el) => el===document.activeElement), true);
+  for (const viewport of [{ width: 1470, height: 883 }, { width: 1920, height: 1080 }, { width: 2940, height: 1766 }, { width: 390, height: 844 }]) {
+    await page.setViewportSize(viewport);
+    await compactFilters();
+    await noOverflow();
+  }
+  await page.setViewportSize({ width: 1440, height: 1040 });
   await page.locator('[data-action="reset-warehouse-filters"]').first().click();
   await clickSelect('[data-warehouse-filter="stock"]', 'Нет в наличии');
   assert.equal(await page.locator('[data-warehouse-results] .material-card').count(), 1);
@@ -97,6 +115,12 @@ try {
   await page.locator('[data-warehouse="products"]').click();
   await clickSelect('[data-warehouse-filter="category"]', 'Аксессуары');
   assert.equal(await page.locator('[data-warehouse-results] .material-card').count(), 1);
+  for (const viewport of [{ width: 1470, height: 883 }, { width: 1920, height: 1080 }, { width: 2940, height: 1766 }, { width: 390, height: 844 }]) {
+    await page.setViewportSize(viewport);
+    await compactFilters();
+    await noOverflow();
+  }
+  await page.setViewportSize({ width: 1440, height: 1040 });
   await page.locator('[data-warehouse="tools"]').click();
   assert.equal(await page.locator('.eq-card').count(), 4);
   await noOverflow();

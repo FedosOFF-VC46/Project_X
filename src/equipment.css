@@ -17,7 +17,8 @@
 .eq-overview-art svg { width: 38px; height: 38px; flex-shrink: 0; transform: rotate(-15deg); }
 .eq-overview-art span { color: var(--green); font-size: 9px; line-height: 1.6; letter-spacing: .08em; }
 .warehouse-filters, .warehouse-filterbar { display: flex; flex-wrap: wrap; gap: 14px; align-items: center; margin: 18px 0; }
-.warehouse-filters { flex-direction: column; align-items: stretch; padding: 16px; border: 1px solid var(--line); background: var(--ghost); border-radius: 16px; }
+.warehouse-filters { display: grid; grid-template-columns: minmax(0,1fr); grid-auto-rows: max-content; align-items: start; align-content: start; align-self: start; height: fit-content; padding: 16px; border: 1px solid var(--line); background: var(--ghost); border-radius: 16px; }
+.warehouse-filters > .warehouse-search { flex: none; }
 .warehouse-search { display: flex; align-items: center; gap: 10px; position: relative; min-width: 0; flex: 1; margin: 0; }
 .warehouse-search > svg { position: absolute; left: 14px; width: 17px; height: 17px; color: var(--muted); pointer-events: none; }
 .warehouse-search input { padding: 12px 14px 12px 42px; min-height: 44px; font-size: 13px; width: 100%; min-width: 0; }
