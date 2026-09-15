@@ -82,7 +82,6 @@ const UNIT_LABELS = {
   m: 'м',
   pcs: 'шт',
   pair: 'пар',
-  use: 'исп.',
 };
 
 const UNIT_PRICE_LABELS = {
@@ -92,7 +91,6 @@ const UNIT_PRICE_LABELS = {
   m: 'метр',
   pcs: 'шт',
   pair: 'пару',
-  use: 'использование',
 };
 
 const PRODUCT_CATEGORY_LABELS = {
@@ -429,12 +427,20 @@ function restoreFormDrafts() {
     if (!draft) return;
     ensureDraftRows(form, draft);
 
+    // Usage balances cannot be restored as physical item quantities.
+    const retiredUnitDraft = form.hasAttribute('data-material-form') && draft.unit === 'use';
+    const retiredQuantityFields = ['package_quantity', 'initial_stock', 'min_stock', 'stock_quantity', 'stock_mode'];
     Object.entries(draft).forEach(([name, savedValue]) => {
+      if (retiredUnitDraft && retiredQuantityFields.includes(name)) return;
       const fields = Array.from(form.querySelectorAll(`[name="${escapeSelectorValue(name)}"]`));
       const values = Array.isArray(savedValue) ? savedValue : [savedValue];
       fields.forEach((field, index) => {
         if (!(field instanceof HTMLInputElement || field instanceof HTMLTextAreaElement || field instanceof HTMLSelectElement)) return;
         if (field.type === 'file' || field.type === 'password' || field.type === 'hidden') return;
+        if (retiredUnitDraft && name === 'unit') {
+          if (form.dataset.action === 'create-material') field.value = 'pcs';
+          return;
+        }
         const value = values[Math.min(index, values.length - 1)];
         if (field instanceof HTMLInputElement && field.type === 'checkbox') {
           field.checked = Boolean(value);
@@ -967,7 +973,6 @@ function renderMaterialItem(material) {
   const stockTone = toNumber(material.min_stock) > 0 && toNumber(material.current_stock) <= toNumber(material.min_stock) ? 'is-low' : '';
   const unit = UNIT_LABELS[material.unit] ?? material.unit;
   const unitPriceLabel = getUnitPriceLabel(material.unit);
-  const isDepreciation = material.category === 'depreciation';
   return `
     <article class="material-card ${stockTone}">
       <button class="card-main-action" data-action="edit-material" data-material-id="${material.id}" type="button">
@@ -978,7 +983,7 @@ function renderMaterialItem(material) {
         </div>
         <div class="material-card-facts">
           <span>
-            <small>${isDepreciation ? 'Осталось' : 'На складе'}</small>
+            <small>На складе</small>
             <strong>${formatQty(material.current_stock)} ${unit}</strong>
           </span>
           <span>
@@ -1069,7 +1074,7 @@ function renderMaterialEditor() {
               </select>
             </label>
             <label>Единица учета
-              <select name="unit" data-material-unit-select>
+              <select name="unit" data-material-unit-select required>
                 ${Object.entries(UNIT_LABELS)
                   .map(([value, label]) => `<option value="${value}" ${unit === value ? 'selected' : ''}>${label}</option>`)
                   .join('')}
@@ -2618,15 +2623,9 @@ function applyMaterialFormMode(form, { syncUnit = false } = {}) {
   const unitSelect = form.querySelector('[name="unit"]');
   const isDepreciation = category === 'depreciation';
 
-  if (syncUnit && unitSelect) {
-    if (isDepreciation && unitSelect.value !== 'use') {
-      unitSelect.value = 'use';
-      syncCustomSelect(unitSelect);
-    }
-    if (!isDepreciation && unitSelect.value === 'use') {
-      unitSelect.value = 'pcs';
-      syncCustomSelect(unitSelect);
-    }
+  if (syncUnit && isDepreciation && unitSelect && unitSelect.value !== 'pcs') {
+    unitSelect.value = 'pcs';
+    syncCustomSelect(unitSelect);
   }
 
   const unit = unitSelect?.value ?? 'g';
@@ -2640,15 +2639,13 @@ function applyMaterialFormMode(form, { syncUnit = false } = {}) {
   const stockLabel = form.querySelector('[data-material-stock-label]');
   const minLabel = form.querySelector('[data-material-min-label]');
 
-  if (costLabel) costLabel.firstChild.textContent = isDepreciation ? 'Стоимость молда / инструмента' : 'Цена упаковки';
-  if (quantityLabel) quantityLabel.firstChild.textContent = isDepreciation ? 'На сколько изделий хватит' : 'Количество в упаковке';
+  if (costLabel) costLabel.firstChild.textContent = isDepreciation ? 'Цена покупки' : 'Цена упаковки';
+  if (quantityLabel) quantityLabel.firstChild.textContent = isDepreciation ? 'Количество в покупке' : 'Количество в упаковке';
   if (stockLabel) {
     const isOperationQuantity = Boolean(stockLabel.querySelector('[name="stock_quantity"]'));
-    stockLabel.firstChild.textContent = isOperationQuantity
-      ? (isDepreciation ? 'Использований' : 'Количество')
-      : (isDepreciation ? 'Осталось использований' : 'На складе сейчас');
+    stockLabel.firstChild.textContent = isOperationQuantity ? 'Количество' : 'На складе сейчас';
   }
-  if (minLabel) minLabel.firstChild.textContent = isDepreciation ? 'Минимум использований' : 'Минимум на складе';
+  if (minLabel) minLabel.firstChild.textContent = 'Минимум на складе';
 }
 
 function updateRecipeFormPreview(form) {
@@ -3564,9 +3561,10 @@ async function createMaterial(form) {
   const packageCost = toNumber(data.get('package_cost'));
   const packageQuantity = toNumber(data.get('package_quantity'));
   const category = String(data.get('category'));
-  const unit = category === 'depreciation' ? 'use' : String(data.get('unit'));
+  const unit = String(data.get('unit'));
+  if (!Object.hasOwn(UNIT_LABELS, unit)) throw new Error('Выберите единицу учета');
   const initialStockRaw = String(data.get('initial_stock') ?? '').trim();
-  const initialStock = initialStockRaw ? toNumber(initialStockRaw) : category === 'depreciation' ? packageQuantity : 0;
+  const initialStock = initialStockRaw ? toNumber(initialStockRaw) : 0;
   const file = data.get('photo');
   const duplicatePhotoPath = optionalString(data.get('duplicate_photo_path'));
   const photoPath = file instanceof File && file.size ? await uploadPhoto(file, 'materials') : duplicatePhotoPath;
@@ -3618,7 +3616,8 @@ async function updateMaterial(form) {
   const packageCost = toNumber(data.get('package_cost'));
   const packageQuantity = toNumber(data.get('package_quantity'));
   const category = String(data.get('category'));
-  const unit = category === 'depreciation' ? 'use' : String(data.get('unit'));
+  const unit = String(data.get('unit'));
+  if (!Object.hasOwn(UNIT_LABELS, unit)) throw new Error('Выберите единицу учета');
   const file = data.get('photo');
   const nextPhotoPath = file instanceof File && file.size ? await uploadPhoto(file, 'materials') : material.photo_path;
 
