@@ -78,6 +78,8 @@ const CATEGORY_LABELS = {
 const UNIT_LABELS = {
   g: 'г',
   ml: 'мл',
+  cm: 'см',
+  m: 'м',
   pcs: 'шт',
   pair: 'пар',
   use: 'исп.',
@@ -86,6 +88,8 @@ const UNIT_LABELS = {
 const UNIT_PRICE_LABELS = {
   g: 'г',
   ml: 'мл',
+  cm: 'сантиметр',
+  m: 'метр',
   pcs: 'шт',
   pair: 'пару',
   use: 'использование',
