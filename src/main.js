@@ -1,6 +1,8 @@
 import { PHOTO_BUCKET } from './config.js';
 import { supabase } from './supabaseClient.js';
 import { initResinScene } from './scene.js';
+import { createEquipmentSystem } from './equipment.js';
+import { filterInventory } from './equipment-math.js';
 
 const app = document.querySelector('#app');
 const toastZone = document.querySelector('#toast-zone');
@@ -27,6 +29,10 @@ const state = {
   productBatches: [],
   moldCalculations: [],
   moldCalculationItems: [],
+  toolModels: [],
+  toolInstances: [],
+  productTools: [],
+  toolEvents: [],
   photoUrls: new Map(),
   formDrafts: readFormDrafts(),
   customProductCategories: readCustomProductCategories(),
@@ -37,6 +43,7 @@ const state = {
   },
   inventory: {
     type: 'raw',
+    filters: { raw: { query: '', category: '', unit: '', stock: '', sort: 'name' }, products: { query: '', category: '', stock: '', sort: 'name' } },
     editorOpen: false,
     editingMaterialId: null,
     duplicatingMaterialId: null,
@@ -153,6 +160,10 @@ const VIEW_GROUPS = [
 ];
 
 const sceneController = initResinScene(canvas, state.theme);
+const equipment = createEquipmentSystem({ state, supabase, escapeHtml, formatCurrency, formatQty,
+  calculateBatch, loadWorkspace, render, showToast,
+  icons: () => window.lucide?.createIcons({ attrs: { 'stroke-width': 1.8 } }),
+});
 applyTheme(state.theme, { persist: false, animate: false });
 boot();
 
@@ -189,6 +200,11 @@ function resetWorkspace() {
   state.productBatches = [];
   state.moldCalculations = [];
   state.moldCalculationItems = [];
+  state.toolModels = [];
+  state.toolInstances = [];
+  state.productTools = [];
+  state.toolEvents = [];
+  equipment.reset();
   state.photoUrls = new Map();
   state.activeProductId = null;
   state.moldEditor.editingCalculationId = null;
@@ -211,6 +227,7 @@ async function loadWorkspace() {
     productBatches,
     moldCalculations,
     moldCalculationItems,
+    toolModels, toolInstances, productTools, toolEvents,
   ] = await Promise.all([
     supabase.from('materials').select('*').eq('user_id', userId).eq('is_active', true).order('created_at', { ascending: false }),
     supabase.from('products').select('*').eq('user_id', userId).order('created_at', { ascending: false }),
@@ -259,6 +276,10 @@ async function loadWorkspace() {
       .select('*')
       .eq('user_id', userId)
       .order('created_at', { ascending: true }),
+    supabase.from('tool_models').select('*').eq('user_id', userId).order('created_at'),
+    supabase.from('tool_instances').select('*').eq('user_id', userId).order('created_at'),
+    supabase.from('product_tools').select('*').eq('user_id', userId),
+    supabase.from('tool_events').select('*').eq('user_id', userId).order('created_at', { ascending: false }).limit(200),
   ]);
 
   const result = [
@@ -272,6 +293,7 @@ async function loadWorkspace() {
     productBatches,
     moldCalculations,
     moldCalculationItems,
+    toolModels, toolInstances, productTools, toolEvents,
   ];
   const failed = result.find((response) => response.error);
   if (failed) {
@@ -279,7 +301,7 @@ async function loadWorkspace() {
   } else {
     state.materials = materials.data ?? [];
     state.products = products.data ?? [];
-    state.productMaterials = productMaterials.data ?? [];
+    state.productMaterials = (productMaterials.data ?? []).filter((row) => row.materials?.category !== 'depreciation');
     state.calculations = calculations.data ?? [];
     state.calculationItems = calculationItems.data ?? [];
     state.stockMovements = stockMovements.data ?? [];
@@ -287,6 +309,10 @@ async function loadWorkspace() {
     state.productBatches = productBatches.data ?? [];
     state.moldCalculations = moldCalculations.data ?? [];
     state.moldCalculationItems = moldCalculationItems.data ?? [];
+    state.toolModels = toolModels.data ?? [];
+    state.toolInstances = toolInstances.data ?? [];
+    state.productTools = productTools.data ?? [];
+    state.toolEvents = toolEvents.data ?? [];
     if (state.moldEditor.editingCalculationId && !state.moldCalculations.some((item) => item.id === state.moldEditor.editingCalculationId)) {
       state.moldEditor.editingCalculationId = null;
     }
@@ -330,6 +356,7 @@ function render() {
     document.querySelectorAll('[data-action="add-product-material"]').forEach(updateRecipeFormPreview);
     document.querySelectorAll('.mold-form').forEach(updateMoldComposerPreview);
     syncThemeToggles();
+    equipment.afterRender();
     window.lucide?.createIcons({ attrs: { 'stroke-width': 1.8 } });
   });
 }
@@ -373,7 +400,7 @@ function getFormDraftKey(form) {
   if (action === 'auth' || action === 'signup') return null;
 
   const parts = [state.user.id, action];
-  ['material_id', 'product_id', 'calculation_id', 'movement_mode', 'duplicate_material_id', 'duplicate_product_id', 'product_category'].forEach((name) => {
+  ['material_id', 'product_id', 'calculation_id', 'movement_mode', 'duplicate_material_id', 'duplicate_product_id', 'product_category', 'tool_model_id', 'tool_instance_id'].forEach((name) => {
     const value = form.querySelector(`[name="${name}"]`)?.value;
     if (value) parts.push(`${name}:${value}`);
   });
@@ -389,6 +416,7 @@ function serializeFormDraft(form) {
     if (!(field instanceof HTMLInputElement || field instanceof HTMLTextAreaElement || field instanceof HTMLSelectElement)) return;
     if (!field.name || field.type === 'file' || field.type === 'password' || field.type === 'hidden') return;
     if (field instanceof HTMLInputElement && (field.type === 'button' || field.type === 'submit')) return;
+    if (form.dataset.action === 'eq-save-product-tools' && field.name === 'tool_ids') return;
 
     const value = field instanceof HTMLInputElement && field.type === 'checkbox' ? field.checked : field.value;
     if (draft[field.name] === undefined) {
@@ -399,6 +427,9 @@ function serializeFormDraft(form) {
       draft[field.name] = [draft[field.name], value];
     }
   });
+  if (form.dataset.action === 'eq-save-product-tools') {
+    draft.toolChoices = Object.fromEntries(Array.from(form.querySelectorAll('[name="tool_ids"]')).map((field) => [field.value, field.checked]));
+  }
   return draft;
 }
 
@@ -431,6 +462,12 @@ function restoreFormDrafts() {
     const retiredUnitDraft = form.hasAttribute('data-material-form') && draft.unit === 'use';
     const retiredQuantityFields = ['package_quantity', 'initial_stock', 'min_stock', 'stock_quantity', 'stock_mode'];
     Object.entries(draft).forEach(([name, savedValue]) => {
+      if (name === 'toolChoices' && form.dataset.action === 'eq-save-product-tools') {
+        form.querySelectorAll('[name="tool_ids"]').forEach((field) => {
+          if (Object.hasOwn(savedValue, field.value)) field.checked = savedValue[field.value];
+        });
+        return;
+      }
       if (retiredUnitDraft && retiredQuantityFields.includes(name)) return;
       const fields = Array.from(form.querySelectorAll(`[name="${escapeSelectorValue(name)}"]`));
       const values = Array.isArray(savedValue) ? savedValue : [savedValue];
@@ -471,7 +508,7 @@ function ensureDraftRows(form, draft) {
       : [];
   const neededRows = Math.max(materialValues.length, quantityValues.length, 1);
   const list = form.querySelector('[data-mold-component-list]');
-  if (!list || !state.materials.length) return;
+  if (!list || !getConsumables().length) return;
 
   while (list.querySelectorAll('[data-mold-row]').length < neededRows) {
     list.insertAdjacentHTML('beforeend', renderMoldComponentRow(Date.now() + list.children.length));
@@ -641,6 +678,7 @@ function renderShell() {
         ${renderCurrentView()}
       </main>
       ${state.productFlow.dialogOpen ? renderProductFlowDialog() : ''}
+      ${equipment.renderDialog()}
     </div>
   `;
 }
@@ -675,14 +713,14 @@ function renderCurrentView() {
 }
 
 function renderDashboardView() {
-  const materialValue = state.materials.reduce((sum, item) => sum + toNumber(item.current_stock) * toNumber(item.unit_price), 0);
-  const lowStock = state.materials.filter((item) => toNumber(item.current_stock) <= toNumber(item.min_stock) && toNumber(item.min_stock) > 0);
+  const materialValue = getConsumables().reduce((sum, item) => sum + toNumber(item.current_stock) * toNumber(item.unit_price), 0);
+  const lowStock = getConsumables().filter((item) => toNumber(item.current_stock) <= toNumber(item.min_stock) && toNumber(item.min_stock) > 0);
   const lastCalculation = state.calculations[0];
   const pricedProducts = state.products.filter((product) => calculateProductSalePrice(product) > 0);
 
   return `
     <section class="dashboard-grid">
-      ${renderMetric('Материалы', state.materials.length, 'layers-3')}
+      ${renderMetric('Материалы', getConsumables().length, 'layers-3')}
       ${renderMetric('Остатки', formatCurrency(materialValue), 'wallet')}
       ${renderMetric('Карты изделий', state.products.length, 'package-check')}
       ${renderMetric('Минимум', lowStock.length, 'triangle-alert')}
@@ -690,7 +728,7 @@ function renderDashboardView() {
 
     <section class="process-grid">
       ${renderProcessCard('Склад', 'Материалы, закупки, остатки', [
-        `${state.materials.length} позиций`,
+        `${getConsumables().length} позиций`,
         `${state.products.reduce((sum, product) => sum + getProductStock(product), 0)} готово`,
       ], 'warehouse')}
       ${renderProcessCard('Производство', 'Карты изделий, молды, смола', [
@@ -774,24 +812,26 @@ function renderWarehouseView() {
       <button class="warehouse-tab ${state.inventory.type === 'products' ? 'is-active' : ''}" data-action="set-warehouse" data-warehouse="products" type="button">
         Продукция
       </button>
+      <button class="warehouse-tab ${state.inventory.type === 'tools' ? 'is-active' : ''}" data-action="set-warehouse" data-warehouse="tools" type="button">Инструменты</button>
     </div>
-    ${state.inventory.type === 'products' ? renderProductWarehouseView() : renderMaterialsView()}
+    ${state.inventory.type === 'tools' ? equipment.renderWarehouse() : state.inventory.type === 'products' ? renderProductWarehouseView() : renderMaterialsView()}
   `;
 }
 
 function renderMaterialsView() {
+  const materials = getConsumables();
   return `
     <section class="inventory-volume">
       <div class="inventory-head">
         <div>
           <p class="panel-kicker">Остатки</p>
-          <h2>${state.materials.length ? `${state.materials.length} позиций` : 'Склад пуст'}</h2>
+          <h2>${materials.length ? `${materials.length} ${pluralRu(materials.length, ['позиция', 'позиции', 'позиций'])}` : 'Склад пуст'}</h2>
         </div>
         <button class="ghost-button compact" data-action="open-material-editor" type="button">Добавить товар</button>
       </div>
       ${
-        state.materials.length
-          ? `<div class="inventory-grid">${state.materials.map(renderMaterialItem).join('')}</div>`
+        materials.length
+          ? `${renderWarehouseFilters('raw')}<div data-warehouse-results>${renderWarehouseResults('raw')}</div>`
           : renderInventoryEmpty()
       }
     </section>
@@ -812,12 +852,44 @@ function renderProductWarehouseView() {
       </div>
       ${
         state.products.length
-          ? `<div class="inventory-grid">${state.products.map(renderProductInventoryItem).join('')}</div>`
+          ? `${renderWarehouseFilters('products')}<div data-warehouse-results>${renderWarehouseResults('products')}</div>`
           : renderProductInventoryEmpty()
       }
     </section>
     ${state.inventory.productEditorOpen ? renderProductStockEditor() : ''}
   `;
+}
+
+function getConsumables() {
+  return state.materials.filter((material) => material.category !== 'depreciation');
+}
+
+function renderWarehouseFilters(type) {
+  const filters = state.inventory.filters[type];
+  const categories = type === 'raw' ? Object.entries(CATEGORY_LABELS).filter(([key]) => key !== 'depreciation') : getProductCategories().map((row) => [row.id, row.label]);
+  const select = (name, title, options) => `<label>${title}<select data-warehouse-filter="${name}">${options.map(([value, text]) => `<option value="${escapeAttr(value)}" ${filters[name] === value ? 'selected' : ''}>${escapeHtml(text)}</option>`).join('')}</select></label>`;
+  return `<div class="warehouse-filters"><label class="warehouse-search"><i data-lucide="search"></i><input type="search" data-warehouse-filter="query" aria-label="Поиск на складе" placeholder="${type === 'raw' ? 'Название материала или заметка' : 'Название или описание изделия'}" value="${escapeAttr(filters.query)}" /></label>
+    <div class="warehouse-filter-selects">${select('category', type === 'raw' ? 'Тип' : 'Раздел', [['', 'Все'], ...categories])}${select('stock', 'Наличие', [['', 'Любой остаток'], ['available', 'Есть на складе'], ['low', 'Заканчивается'], ['empty', 'Нет в наличии']])}${type === 'raw' ? select('unit', 'Единица', [['', 'Все единицы'], ...Object.entries(UNIT_LABELS)]) : ''}${select('sort', 'Порядок', [['name', 'По названию'], ['recent', 'Сначала новые'], ['stock', 'Меньше остаток'], ['price', 'Дешевле сначала']])}<button class="ghost-button compact" type="button" data-action="reset-warehouse-filters" title="Сбросить фильтры"><i data-lucide="rotate-ccw"></i>Сбросить</button></div></div>`;
+}
+
+function renderWarehouseResults(type) {
+  const source = type === 'raw' ? getConsumables() : state.products;
+  const items = filterInventory(source, state.inventory.filters[type], {
+    stock: (item) => type === 'raw' ? toNumber(item.current_stock) : getProductStock(item),
+    category: (item) => type === 'raw' ? item.category : getProductCategory(item),
+    price: (item) => type === 'raw' ? toNumber(item.unit_price) : calculateProductSalePrice(item),
+  });
+  return `<p class="warehouse-result-count" role="status">Показано ${items.length} из ${source.length}</p>${items.length ? `<div class="inventory-grid">${items.map(type === 'raw' ? renderMaterialItem : renderProductInventoryItem).join('')}</div>` : '<div class="eq-empty"><i data-lucide="search-x"></i><h3>Ничего не найдено</h3><p>Измените запрос или сбросьте фильтры.</p><button class="ghost-button compact" type="button" data-action="reset-warehouse-filters">Сбросить фильтры</button></div>'}`;
+}
+
+function updateWarehouseFilter(target) {
+  if (!target.matches('[data-warehouse-filter]')) return false;
+  const type = state.inventory.type;
+  if (!state.inventory.filters[type]) return false;
+  state.inventory.filters[type][target.dataset.warehouseFilter] = target.value;
+  const results = document.querySelector('[data-warehouse-results]');
+  if (results) { results.innerHTML = renderWarehouseResults(type); window.lucide?.createIcons(); }
+  return true;
 }
 
 function renderProductInventoryItem(product) {
@@ -899,6 +971,7 @@ function renderProductStockEditor() {
             <span>готово на складе</span>
           </div>
         </div>
+        <div class="eq-stock-manufacture">${equipment.productionButton(product.id)}<span>Учесть материалы и ресурс инструментов</span></div>
         <div class="material-ledger product-ledger">
           <div>
             <span>На складе</span>
@@ -948,7 +1021,7 @@ function renderProductStockEditor() {
               <label>Действие
                 <select name="stock_mode">
                   <option value="">Без изменения</option>
-                  <option value="receipt">Добавить к складу</option>
+                  <option value="receipt">Добавить готовые без изготовления</option>
                   <option value="adjustment">Установить остаток</option>
                 </select>
               </label>
@@ -1068,7 +1141,7 @@ function renderMaterialEditor() {
           <div class="form-grid">
             <label>Тип
               <select name="category" data-material-category-select>
-                ${Object.entries(CATEGORY_LABELS)
+                ${Object.entries(CATEGORY_LABELS).filter(([key]) => key !== 'depreciation')
                   .map(([value, label]) => `<option value="${value}" ${(source?.category ?? 'material') === value ? 'selected' : ''}>${label}</option>`)
                   .join('')}
               </select>
@@ -1337,6 +1410,7 @@ function renderProductDetail(product) {
           <span>Работа</span>
           <strong>${formatProductLabor(product)}</strong>
         </div>
+        <div><span>Износ инструментов</span><strong>${formatCurrency(equipment.estimate(product))} / шт</strong></div>
         <div>
           <span>Себестоимость</span>
           <strong>${formatCurrency(cost)} / шт</strong>
@@ -1360,6 +1434,7 @@ function renderProductDetail(product) {
       </div>
 
       <div class="product-action-row">
+        ${equipment.productionButton(product.id)}
         <button class="ghost-button compact" data-action="edit-product" data-product-id="${product.id}" type="button">
           <i data-lucide="pencil"></i>
           Редактировать
@@ -1379,6 +1454,7 @@ function renderProductDetail(product) {
       ${renderMoldApplyPanel(product)}
       ${renderProductMaterialForm(product)}
       ${renderRecipeTable(product.id)}
+      ${equipment.renderProductTools(product)}
     </div>
   `;
 }
@@ -1418,7 +1494,7 @@ function renderMoldApplyPanel(product) {
 }
 
 function renderProductMaterialForm(product) {
-  if (!state.materials.length) {
+  if (!getConsumables().length) {
     return `
       <div class="mold-apply-card manual-material-card">
         <div>
@@ -1442,7 +1518,7 @@ function renderProductMaterialForm(product) {
           Материал
           <select name="material_id" data-recipe-material required>
             <option value="">Выбрать</option>
-            ${state.materials
+            ${getConsumables()
               .map((material) => {
                 const unit = UNIT_LABELS[material.unit] ?? material.unit ?? 'ед.';
                 return `<option value="${material.id}" data-unit="${escapeAttr(unit)}" data-price="${escapeAttr(material.unit_price ?? 0)}">${escapeHtml(material.name)} · ${unit}</option>`;
@@ -1495,7 +1571,7 @@ function renderProductCreatorDialog() {
   const sourceMaterialCost = sourceProduct ? calculateProductMaterialCost(sourceProduct.id) : 0;
   const initialWorkHours = toNumber(sourceProduct?.work_hours);
   const initialMarkup = multiplierToMarkupPercent(MARKUP_SEGMENTS[selectedMarkup].multiplier);
-  const initialCost = sourceMaterialCost + initialWorkHours * LABOR_RATE_PER_HOUR;
+  const initialCost = sourceMaterialCost + initialWorkHours * LABOR_RATE_PER_HOUR + equipment.estimate(sourceProduct || { work_hours: initialWorkHours });
   const initialPrice = calculateSalePriceFromCost(initialCost, initialMarkup);
   return `
     <section class="material-editor-layer" aria-label="${isEdit ? 'Редактирование изделия' : isDuplicate ? 'Копия изделия' : 'Новое изделие'}">
@@ -2212,13 +2288,13 @@ function renderMoldView() {
               <p class="panel-kicker">Состав</p>
               <h3>Что уйдет в заливку</h3>
             </div>
-            <button class="ghost-button compact" data-action="add-mold-component" type="button" ${!state.materials.length ? 'disabled' : ''}>
+            <button class="ghost-button compact" data-action="add-mold-component" type="button" ${!getConsumables().length ? 'disabled' : ''}>
               <i data-lucide="plus"></i>
               Добавить
             </button>
           </div>
           <div class="mold-component-list" data-mold-component-list>
-            ${state.materials.length ? componentRows : renderMoldNoMaterials()}
+            ${getConsumables().length ? componentRows : renderMoldNoMaterials()}
           </div>
 
           <label>Примечание<textarea name="notes" rows="3" placeholder="Например: прозрачная база, зеленый пигмент, золото">${escapeHtml(editingCalculation?.notes ?? '')}</textarea></label>
@@ -2331,7 +2407,7 @@ function renderMoldComponentRow(index = 0, item = null) {
 function renderMoldMaterialOptions(selectedId = '') {
   return `
     <option value="">Выбрать материал</option>
-    ${state.materials
+    ${getConsumables()
       .map((material) => {
         const unit = UNIT_LABELS[material.unit] ?? material.unit ?? 'ед.';
         return `<option value="${material.id}" data-unit="${escapeAttr(unit)}" data-price="${escapeAttr(material.unit_price ?? 0)}" data-stock="${escapeAttr(material.current_stock ?? 0)}" ${selectedId === material.id ? 'selected' : ''}>${escapeHtml(material.name)} · ${unit}</option>`;
@@ -2678,7 +2754,9 @@ function updateProductPricePreview(form) {
   const materialCost = preview.dataset.materialCost === undefined ? null : toNumber(preview.dataset.materialCost);
   const laborRate = toNumber(preview.dataset.laborRate);
   const workHours = toNumber(form.querySelector('[name="work_hours"]')?.value);
-  const cost = materialCost === null ? toNumber(preview.dataset.cost) : materialCost + workHours * laborRate;
+  const productId = form.querySelector('[name="product_id"]')?.value || form.querySelector('[name="duplicate_product_id"]')?.value;
+  const product = state.products.find((item) => item.id === productId);
+  const cost = materialCost === null ? toNumber(preview.dataset.cost) : materialCost + workHours * laborRate + equipment.estimate({ ...product, work_hours: workHours });
   preview.textContent = `${formatCurrency(calculateSalePriceFromCost(cost, markup))}${preview.closest('.unit-price-preview') ? ' / шт' : ''}`;
 }
 
@@ -2749,7 +2827,11 @@ function updateMoldComposerPreview(form) {
 }
 
 function getMoldItems(calculationId) {
-  return state.moldCalculationItems.filter((item) => item.calculation_id === calculationId);
+  return state.moldCalculationItems.filter((item) => item.calculation_id === calculationId && !isToolMaterial(item.material_id));
+}
+
+function isToolMaterial(id) {
+  return state.toolModels.some((model) => model.source_material_id === id) || state.materials.some((item) => item.id === id && item.category === 'depreciation');
 }
 
 function getMoldVisualState(lengthValue, widthValue, heightValue) {
@@ -2788,7 +2870,7 @@ function getEditingMoldCalculation() {
 function getMoldEditableItems(calculation) {
   const items = getMoldItems(calculation.id);
   if (items.length) return items;
-  if (!calculation.material_id) return [];
+  if (!calculation.material_id || isToolMaterial(calculation.material_id)) return [];
   return [
     {
       material_id: calculation.material_id,
@@ -2799,6 +2881,7 @@ function getMoldEditableItems(calculation) {
 
 function getMoldTotalCost(calculation, items = getMoldItems(calculation.id)) {
   if (items.length) return items.reduce((sum, item) => sum + toNumber(item.total_cost), 0);
+  if (isToolMaterial(calculation.material_id) || state.moldCalculationItems.some((item) => item.calculation_id === calculation.id)) return 0;
   return toNumber(calculation.material_cost_total);
 }
 
@@ -2847,7 +2930,8 @@ function calculateProductLaborCost(productOrId) {
 }
 
 function calculateProductCost(productId) {
-  return calculateProductMaterialCost(productId) + calculateProductLaborCost(productId);
+  const product = state.products.find((item) => item.id === productId);
+  return calculateProductMaterialCost(productId) + calculateProductLaborCost(productId) + (product ? equipment.estimate(product) : 0);
 }
 
 function getProductMarkup(product) {
@@ -2985,6 +3069,7 @@ function exportProductPrice(productId) {
     ]),
     ['Материалы всего', '', '', formatCurrency(materialCost), ''],
     ['Время', `${formatQty(product.work_hours)} ч`, `${formatCurrency(LABOR_RATE_PER_HOUR)} / ч`, formatCurrency(laborCost), ''],
+    ['Износ инструментов', '', '', formatCurrency(equipment.estimate(product)), ''],
     ['Стоимость без наценки', '', '', formatCurrency(cost), ''],
     ['Наценка', getProductMarkupTitle(product), `×${formatMultiplier(markupPercentToMultiplier(markup))}`, formatCurrency(markupAmount), ''],
     ['Общая стоимость', '', '', formatCurrency(price), ''],
@@ -3160,10 +3245,18 @@ document.addEventListener('click', async (event) => {
     return;
   }
 
+  try { if (await equipment.click(event.target)) return; }
+  catch (error) { showToast(toUserMessage(error), 'error'); return; }
+
   const actionButton = event.target.closest('[data-action]');
   if (!actionButton) return;
 
   const { action } = actionButton.dataset;
+  if (action === 'reset-warehouse-filters') {
+    const filters = state.inventory.filters[state.inventory.type];
+    if (filters) Object.keys(filters).forEach((key) => { filters[key] = key === 'sort' ? 'name' : ''; });
+    render(); return;
+  }
   if (action === 'logout') {
     await supabase.auth.signOut();
     showToast('Вы вышли из приложения');
@@ -3178,7 +3271,7 @@ document.addEventListener('click', async (event) => {
     syncThemeToggles();
   }
   if (action === 'set-warehouse') {
-    state.inventory.type = actionButton.dataset.warehouse === 'products' ? 'products' : 'raw';
+    state.inventory.type = ['products', 'tools'].includes(actionButton.dataset.warehouse) ? actionButton.dataset.warehouse : 'raw';
     state.inventory.editorOpen = false;
     state.inventory.editingMaterialId = null;
     state.inventory.duplicatingMaterialId = null;
@@ -3280,8 +3373,7 @@ document.addEventListener('click', async (event) => {
     render();
   }
   if (action === 'open-calculation-dialog') {
-    state.calculator.dialogOpen = true;
-    render();
+    equipment.openProduction(actionButton.dataset.productId || state.calculator.productId || state.activeProductId);
   }
   if (action === 'close-calculation-dialog') {
     state.calculator.dialogOpen = false;
@@ -3369,6 +3461,7 @@ document.addEventListener('input', (event) => {
     filterCustomSelect(target);
     return;
   }
+  if (updateWarehouseFilter(target) || equipment.input(target)) return;
   if (target.matches('[data-file-picker]')) {
     const label = target.closest('.file-picker');
     const name = label?.querySelector('[data-file-name]');
@@ -3429,12 +3522,14 @@ document.addEventListener('change', (event) => {
 });
 
 document.addEventListener('keydown', (event) => {
+  if (event.key === 'Tab') { equipment.keydown(event); return; }
   if (event.key !== 'Escape') return;
   const openedSelect = document.querySelector('.select-ui.is-open');
   if (openedSelect) {
     closeCustomSelects();
     return;
   }
+  if (equipment.keydown(event)) return;
   if (state.productFlow.dialogOpen) {
     state.productFlow.dialogOpen = false;
     render();
@@ -3481,12 +3576,14 @@ document.addEventListener('submit', async (event) => {
   const form = event.target.closest('form[data-action]');
   if (!form) return;
   event.preventDefault();
+  if (form.hasAttribute('aria-busy')) return;
 
   const action = form.dataset.action;
   const draftKey = getFormDraftKey(form);
 
   try {
     setBusy(form, true);
+    if (action.startsWith('eq-') && await equipment.submit(form) === false) return;
     if (action === 'auth') await handleAuth(form);
     if (action === 'signup') await handleSignup(form);
     if (action === 'create-material') await createMaterial(form);
@@ -3561,6 +3658,7 @@ async function createMaterial(form) {
   const packageCost = toNumber(data.get('package_cost'));
   const packageQuantity = toNumber(data.get('package_quantity'));
   const category = String(data.get('category'));
+  if (category === 'depreciation') throw new Error('Добавьте инструмент во вкладке «Инструменты»');
   const unit = String(data.get('unit'));
   if (!Object.hasOwn(UNIT_LABELS, unit)) throw new Error('Выберите единицу учета');
   const initialStockRaw = String(data.get('initial_stock') ?? '').trim();
@@ -3616,6 +3714,7 @@ async function updateMaterial(form) {
   const packageCost = toNumber(data.get('package_cost'));
   const packageQuantity = toNumber(data.get('package_quantity'));
   const category = String(data.get('category'));
+  if (category === 'depreciation') throw new Error('Измените инструмент во вкладке «Инструменты»');
   const unit = String(data.get('unit'));
   if (!Object.hasOwn(UNIT_LABELS, unit)) throw new Error('Выберите единицу учета');
   const file = data.get('photo');
@@ -3860,7 +3959,8 @@ async function createProduct(form) {
   const photoPath = filePhotoPath ?? duplicatePhotoPath;
   const markup = getMarkupPercentFromForm(form);
   const workHours = toNumber(data.get('work_hours'));
-  const defaultSalePrice = calculateSalePriceFromCost(duplicateMaterialCost + workHours * LABOR_RATE_PER_HOUR, markup);
+  const toolCost = equipment.estimate({ id: duplicateProductId, work_hours: workHours });
+  const defaultSalePrice = calculateSalePriceFromCost(duplicateMaterialCost + workHours * LABOR_RATE_PER_HOUR + toolCost, markup);
   const category = optionalString(data.get('product_category')) || getActiveProductCategory();
 
   const { data: product, error } = await supabase
@@ -3880,6 +3980,14 @@ async function createProduct(form) {
   if (error) throw error;
 
   if (duplicateProductId) {
+    const sourceTools = state.productTools.filter((row) => row.product_id === duplicateProductId);
+    if (sourceTools.length) {
+      const { error: toolError } = await supabase.rpc('save_product_tools', {
+        p_product_id: product.id,
+        p_tools: sourceTools.map((row) => ({ model_id: row.model_id, enabled: row.enabled, quantity_per_item: row.quantity_per_item })),
+      });
+      if (toolError) throw toolError;
+    }
     const sourceRows = state.productMaterials.filter((row) => row.product_id === duplicateProductId);
     if (sourceRows.length) {
       const { error: copyError } = await supabase.from('product_materials').insert(
@@ -3918,7 +4026,7 @@ async function updateProduct(form) {
   const markup = getMarkupPercentFromForm(form);
   const workHours = toNumber(data.get('work_hours'));
   const category = optionalString(data.get('product_category')) || getProductCategory(product);
-  const cost = calculateProductMaterialCost(productId) + workHours * LABOR_RATE_PER_HOUR;
+  const cost = calculateProductMaterialCost(productId) + workHours * LABOR_RATE_PER_HOUR + equipment.estimate({ ...product, work_hours: workHours });
   const price = calculateSalePriceFromCost(cost, markup);
 
   const { error } = await supabase
@@ -4050,6 +4158,7 @@ async function addProductMaterial(form) {
   const quantity = toNumber(data.get('quantity_per_unit'));
   const product = state.products.find((entry) => entry.id === productId);
   const material = state.materials.find((entry) => entry.id === materialId);
+  if (material?.category === 'depreciation') throw new Error('Выберите инструмент в блоке «Инструменты»');
 
   if (!product) throw new Error('Изделие не найдено');
   if (!material) throw new Error('Выберите материал');
@@ -4184,6 +4293,7 @@ async function saveMoldCalculation(form) {
       const quantity = quantities[index] ?? 0;
       if (!materialId && quantity <= 0) return null;
       if (!material) throw new Error('Выберите материал');
+      if (material.category === 'depreciation') throw new Error('Инструменты учитываются в карте изделия отдельно');
       if (quantity <= 0) throw new Error('Укажите количество компонента');
       return {
         user_id: requireUserId(),

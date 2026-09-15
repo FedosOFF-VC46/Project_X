@@ -24,6 +24,17 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Check inventory calculations
+        run: |
+          node --check src/main.js
+          node --check src/equipment.js
+          node --test tests/equipment.test.mjs
+
       - name: Setup Pages
         uses: actions/configure-pages@v5
 

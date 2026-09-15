@@ -1,0 +1,78 @@
+-- Run as the project database administrator. Fixtures and writes are rolled back.
+begin;
+insert into auth.users(id,email) values(gen_random_uuid(),'formula-test-'||gen_random_uuid()||'@example.invalid');
+select set_config('request.jwt.claim.sub',id::text,true) from auth.users where email like 'formula-test-%@example.invalid' order by created_at desc nulls first limit 1;
+set local role authenticated;
+do $$
+declare
+  u uuid:=auth.uid(); mid uuid; a uuid; b uuid; pid uuid; mat uuid; cid uuid; again uuid; req uuid:=gen_random_uuid(); tool_data jsonb;
+  v numeric; rows_before integer; failed boolean; cycle uuid; ci uuid; hours uuid; hi uuid; days uuid; di uuid;
+begin
+  insert into public.materials(user_id,name,unit,package_cost,package_quantity) values(u,'Тест: смола','g',1000,500) returning id into mat;
+  insert into public.stock_movements(user_id,material_id,movement_type,source_type,quantity_delta) values(u,mat,'receipt','manual',500);
+  insert into public.products(user_id,name,work_hours,markup_percent) values(u,'Тест: изделие',0.5,20) returning id into pid;
+  insert into public.product_materials(user_id,product_id,material_id,quantity_per_unit) values(u,pid,mat,35);
+  mid:=public.save_tool_model(null,jsonb_build_object('name','Тест: молд','kind','mold','resource_mode','items','resource_limit',10,'purchase_cost',1000,'started_on',current_date,'used_resource',7),1);
+  select id into a from public.tool_instances where model_id=mid;
+  perform public.add_tool_instances(mid,1,1200,10,current_date,0);
+  select id into b from public.tool_instances where model_id=mid and id<>a;
+  perform public.save_product_tools(pid,jsonb_build_array(jsonb_build_object('model_id',mid,'enabled',true)));
+  tool_data:=jsonb_build_array(jsonb_build_object('instance_id',a,'model_id',mid,'amount',3),jsonb_build_object('instance_id',b,'model_id',mid,'amount',2));
+  cid:=public.produce_with_tools(pid,5,tool_data,'Проверка',req);
+  assert (select current_stock=325 from public.materials where id=mat),'material stock';
+  assert (select current_stock=5 from public.products where id=pid),'finished stock';
+  assert (select tool_cost_total=540 and labor_cost_total=500 and material_cost_total=350 and cost_per_unit=278 from public.production_calculations where id=cid),'full cost';
+  assert (select cost_per_unit=278 and sale_price_per_unit=333.60 from public.product_batches where calculation_id=cid),'batch snapshot';
+  assert (select used_resource=10 and charged_cost=1000 from public.tool_instances where id=a),'first mold';
+  assert (select used_resource=2 and charged_cost=240 from public.tool_instances where id=b),'second mold';
+  again:=public.produce_with_tools(pid,5,tool_data,'Проверка',req);
+  assert again=cid,'idempotent result';
+  assert (select current_stock=325 from public.materials where id=mat),'retry must not consume';
+  select count(*) into rows_before from public.production_calculations where user_id=u;
+  failed:=false;
+  begin
+    perform public.produce_with_tools(pid,20,jsonb_build_array(jsonb_build_object('instance_id',b,'model_id',mid,'amount',20)),null,gen_random_uuid());
+  exception when others then failed:=true; end;
+  assert failed,'insufficient stock/resource accepted';
+  assert (select count(*)=rows_before from public.production_calculations where user_id=u),'failed operation not atomic';
+  assert (select current_stock=325 from public.materials where id=mat),'failure consumed stock';
+  failed:=false;
+  begin perform public.produce_with_tools(pid,1,'[]',null,gen_random_uuid()); exception when others then failed:=true; end;
+  assert failed,'missing tool accepted';
+  failed:=false;
+  begin perform public.produce_with_tools(pid,6,tool_data,'Проверка',req); exception when others then failed:=true; end;
+  assert failed,'request id accepted with different input';
+  perform public.change_tool_instance(a,'extend',10,'Молд №1','Продление');
+  cid:=public.produce_with_tools(pid,1,jsonb_build_array(jsonb_build_object('instance_id',a,'model_id',mid,'amount',1)),null,gen_random_uuid());
+  assert (select tool_cost_total=0 from public.production_calculations where id=cid),'charged twice after extension';
+  perform public.change_tool_instance(b,'retire',0,null,'Износ');
+  assert (select status='retired' and charged_cost=1200 from public.tool_instances where id=b),'retirement';
+  failed:=false;
+  begin perform public.produce_with_tools(pid,1,jsonb_build_array(jsonb_build_object('instance_id',b,'model_id',mid,'amount',1)),null,gen_random_uuid()); exception when others then failed:=true; end;
+  assert failed,'retired tool accepted';
+  cycle:=public.save_tool_model(null,jsonb_build_object('name','Тест: двойной молд','kind','mold','resource_mode','cycles','resource_limit',10,'purchase_cost',1000,'output_per_cycle',2,'started_on',current_date),1);
+  select id into ci from public.tool_instances where model_id=cycle;
+  perform public.save_product_tools(pid,jsonb_build_array(jsonb_build_object('model_id',cycle,'enabled',true)));
+  cid:=public.produce_with_tools(pid,3,jsonb_build_array(jsonb_build_object('instance_id',ci,'model_id',cycle,'amount',2)),null,gen_random_uuid());
+  assert (select tool_cost_total=200 from public.production_calculations where id=cid),'multi-cavity cycle cost';
+  hours:=public.save_tool_model(null,jsonb_build_object('name','Тест: весы','kind','equipment','resource_mode','hours','resource_limit',100,'purchase_cost',1000,'started_on',current_date,'is_common',true),1);
+  days:=public.save_tool_model(null,jsonb_build_object('name','Тест: контейнер','kind','other','resource_mode','days','resource_limit',10,'purchase_cost',1000,'hours_per_day',8,'started_on',current_date,'is_common',true),1);
+  select id into hi from public.tool_instances where model_id=hours;
+  select id into di from public.tool_instances where model_id=days;
+  perform public.save_product_tools(pid,'[]');
+  cid:=public.produce_with_tools(pid,2,jsonb_build_array(jsonb_build_object('instance_id',hi,'model_id',hours,'amount',1),jsonb_build_object('instance_id',di,'model_id',days,'amount',0.125)),null,gen_random_uuid());
+  assert (select tool_cost_total=22.5 from public.production_calculations where id=cid),'hours/calendar common allocation';
+  perform public.save_product_tools(pid,jsonb_build_array(jsonb_build_object('model_id',hours,'enabled',false),jsonb_build_object('model_id',days,'enabled',false)));
+  cid:=public.produce_with_tools(pid,1,'[]',null,gen_random_uuid());
+  assert (select tool_cost_total=0 from public.production_calculations where id=cid),'common exclusion';
+  -- A different JWT cannot see or modify this account's fixtures.
+  perform set_config('request.jwt.claim.sub',gen_random_uuid()::text,true);
+  assert not exists(select 1 from public.tool_models where id=mid),'RLS select leak';
+  failed:=false;
+  begin perform public.change_tool_instance(a,'rename',0,'Чужой',''); exception when others then failed:=true; end;
+  assert failed,'RLS update leak';
+  perform set_config('request.jwt.claim.sub',u::text,true);
+end $$;
+reset role;
+rollback;
+select 'Equipment database scenarios passed; all fixtures rolled back' as result;
