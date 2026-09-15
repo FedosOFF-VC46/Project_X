@@ -70,7 +70,7 @@ const state = {
 
 const CATEGORY_LABELS = {
   material: 'Материал',
-  depreciation: 'Амортизация',
+  depreciation: 'Молд / инструмент',
   packaging: 'Упаковка',
   overhead: 'Накладные',
 };
@@ -79,6 +79,16 @@ const UNIT_LABELS = {
   g: 'г',
   ml: 'мл',
   pcs: 'шт',
+  pair: 'пар',
+  use: 'исп.',
+};
+
+const UNIT_PRICE_LABELS = {
+  g: 'г',
+  ml: 'мл',
+  pcs: 'шт',
+  pair: 'пару',
+  use: 'использование',
 };
 
 const PRODUCT_CATEGORY_LABELS = {
@@ -310,6 +320,10 @@ function render() {
   restoreFormDrafts();
   requestAnimationFrame(() => {
     enhanceSelects();
+    document.querySelectorAll('[data-material-form]').forEach((form) => {
+      applyMaterialFormMode(form);
+      updateMaterialFormPreview(form);
+    });
     document.querySelectorAll('[data-product-pricing-form]').forEach(updateProductPricePreview);
     document.querySelectorAll('[data-action="add-product-material"]').forEach(updateRecipeFormPreview);
     document.querySelectorAll('.mold-form').forEach(updateMoldComposerPreview);
@@ -948,6 +962,8 @@ function renderMaterialItem(material) {
   const photo = getPhotoUrl(material.photo_path);
   const stockTone = toNumber(material.min_stock) > 0 && toNumber(material.current_stock) <= toNumber(material.min_stock) ? 'is-low' : '';
   const unit = UNIT_LABELS[material.unit] ?? material.unit;
+  const unitPriceLabel = getUnitPriceLabel(material.unit);
+  const isDepreciation = material.category === 'depreciation';
   return `
     <article class="material-card ${stockTone}">
       <button class="card-main-action" data-action="edit-material" data-material-id="${material.id}" type="button">
@@ -958,7 +974,7 @@ function renderMaterialItem(material) {
         </div>
         <div class="material-card-facts">
           <span>
-            <small>На складе</small>
+            <small>${isDepreciation ? 'Осталось' : 'На складе'}</small>
             <strong>${formatQty(material.current_stock)} ${unit}</strong>
           </span>
           <span>
@@ -967,7 +983,7 @@ function renderMaterialItem(material) {
           </span>
           <span>
             <small>Цена</small>
-            <strong>${formatCurrency(material.unit_price)} / ${unit}</strong>
+            <strong>${formatCurrency(material.unit_price)} / ${unitPriceLabel}</strong>
           </span>
         </div>
       </button>
@@ -1000,6 +1016,7 @@ function renderMaterialEditor() {
   const isDuplicate = Boolean(duplicateMaterial);
   const unit = source?.unit ?? 'g';
   const unitLabel = UNIT_LABELS[unit] ?? unit;
+  const unitPriceLabel = getUnitPriceLabel(unit);
   const initialStock = isDuplicate ? duplicateMaterial.package_quantity : '';
   return `
     <section class="material-editor-layer" aria-label="${isEdit ? 'Редактирование материала' : isDuplicate ? 'Копия материала' : 'Новый материал'}">
@@ -1027,7 +1044,7 @@ function renderMaterialEditor() {
                   <strong>${formatQty(material.min_stock)} ${unitLabel}</strong>
                 </div>
                 <div>
-                  <span>Цена за ${unitLabel}</span>
+                  <span>Цена за ${unitPriceLabel}</span>
                   <strong>${formatCurrency(material.unit_price)}</strong>
                 </div>
               </div>
@@ -1040,7 +1057,13 @@ function renderMaterialEditor() {
           <input type="hidden" name="duplicate_photo_path" value="${escapeAttr(duplicateMaterial?.photo_path ?? '')}" />
           <label>Название<input name="name" required value="${escapeAttr(source?.name ?? '')}" placeholder="Смола Crystal" /></label>
           <div class="form-grid">
-            <label>Тип${renderSelect('category', CATEGORY_LABELS, source?.category ?? 'material')}</label>
+            <label>Тип
+              <select name="category" data-material-category-select>
+                ${Object.entries(CATEGORY_LABELS)
+                  .map(([value, label]) => `<option value="${value}" ${(source?.category ?? 'material') === value ? 'selected' : ''}>${label}</option>`)
+                  .join('')}
+              </select>
+            </label>
             <label>Единица учета
               <select name="unit" data-material-unit-select>
                 ${Object.entries(UNIT_LABELS)
@@ -1050,13 +1073,13 @@ function renderMaterialEditor() {
             </label>
           </div>
           <div class="form-grid">
-            <label>Цена упаковки
+            <label data-material-cost-label>Цена упаковки
               <span class="input-with-suffix">
                 <input name="package_cost" data-material-price-source type="number" step="0.01" min="0" required value="${escapeAttr(source?.package_cost ?? '')}" placeholder="2500" />
                 <span>₽</span>
               </span>
             </label>
-            <label>Количество в упаковке
+            <label data-material-quantity-label>Количество в упаковке
               <span class="input-with-suffix">
                 <input name="package_quantity" data-material-price-source type="number" step="0.001" min="0.001" required value="${escapeAttr(source?.package_quantity ?? '')}" placeholder="1000" />
                 <span data-unit-suffix>${unitLabel}</span>
@@ -1070,19 +1093,19 @@ function renderMaterialEditor() {
           <div class="form-grid">
             ${
               isEdit
-                ? `<label>Минимум на складе
+                ? `<label data-material-min-label>Минимум на складе
                     <span class="input-with-suffix">
                       <input name="min_stock" type="number" step="0.001" min="0" value="${escapeAttr(material?.min_stock ?? '')}" placeholder="150" />
                       <span data-unit-suffix>${unitLabel}</span>
                     </span>
                   </label>`
-                : `<label>На складе сейчас
+                : `<label data-material-stock-label>На складе сейчас
                     <span class="input-with-suffix">
                       <input name="initial_stock" type="number" step="0.001" min="0" value="${escapeAttr(initialStock)}" placeholder="1000" />
                       <span data-unit-suffix>${unitLabel}</span>
                     </span>
                   </label>
-                  <label>Минимум на складе
+                  <label data-material-min-label>Минимум на складе
                     <span class="input-with-suffix">
                       <input name="min_stock" type="number" step="0.001" min="0" value="${escapeAttr(source?.min_stock ?? '')}" placeholder="150" />
                       <span data-unit-suffix>${unitLabel}</span>
@@ -1106,7 +1129,7 @@ function renderMaterialEditor() {
                         <option value="adjustment">Установить остаток</option>
                       </select>
                     </label>
-                    <label>Количество
+                    <label data-material-stock-label>Количество
                       <span class="input-with-suffix">
                         <input name="stock_quantity" type="number" step="0.001" min="0" placeholder="${formatQty(material.current_stock)}" />
                         <span data-unit-suffix>${unitLabel}</span>
@@ -2571,16 +2594,57 @@ function filterCustomSelect(input) {
 
 function updateMaterialFormPreview(form) {
   if (!form) return;
+  applyMaterialFormMode(form);
   const cost = toNumber(form.querySelector('[name="package_cost"]')?.value);
   const quantity = toNumber(form.querySelector('[name="package_quantity"]')?.value);
   const unit = form.querySelector('[name="unit"]')?.value ?? 'g';
   const unitLabel = UNIT_LABELS[unit] ?? unit;
+  const unitPriceLabel = getUnitPriceLabel(unit);
   const price = quantity > 0 ? cost / quantity : 0;
   const label = form.querySelector('[data-unit-price-label]');
   const value = form.querySelector('[data-unit-price-value]');
 
-  if (label) label.textContent = `Цена за ${unitLabel}`;
+  if (label) label.textContent = `Цена за ${unitPriceLabel}`;
   if (value) value.textContent = formatCurrency(price);
+}
+
+function applyMaterialFormMode(form, { syncUnit = false } = {}) {
+  if (!form) return;
+  const category = form.querySelector('[name="category"]')?.value ?? 'material';
+  const unitSelect = form.querySelector('[name="unit"]');
+  const isDepreciation = category === 'depreciation';
+
+  if (syncUnit && unitSelect) {
+    if (isDepreciation && unitSelect.value !== 'use') {
+      unitSelect.value = 'use';
+      syncCustomSelect(unitSelect);
+    }
+    if (!isDepreciation && unitSelect.value === 'use') {
+      unitSelect.value = 'pcs';
+      syncCustomSelect(unitSelect);
+    }
+  }
+
+  const unit = unitSelect?.value ?? 'g';
+  const unitLabel = UNIT_LABELS[unit] ?? unit;
+  form.querySelectorAll('[data-unit-suffix]').forEach((node) => {
+    node.textContent = unitLabel;
+  });
+
+  const costLabel = form.querySelector('[data-material-cost-label]');
+  const quantityLabel = form.querySelector('[data-material-quantity-label]');
+  const stockLabel = form.querySelector('[data-material-stock-label]');
+  const minLabel = form.querySelector('[data-material-min-label]');
+
+  if (costLabel) costLabel.firstChild.textContent = isDepreciation ? 'Стоимость молда / инструмента' : 'Цена упаковки';
+  if (quantityLabel) quantityLabel.firstChild.textContent = isDepreciation ? 'На сколько изделий хватит' : 'Количество в упаковке';
+  if (stockLabel) {
+    const isOperationQuantity = Boolean(stockLabel.querySelector('[name="stock_quantity"]'));
+    stockLabel.firstChild.textContent = isOperationQuantity
+      ? (isDepreciation ? 'Использований' : 'Количество')
+      : (isDepreciation ? 'Осталось использований' : 'На складе сейчас');
+  }
+  if (minLabel) minLabel.firstChild.textContent = isDepreciation ? 'Минимум использований' : 'Минимум на складе';
 }
 
 function updateRecipeFormPreview(form) {
@@ -3324,11 +3388,12 @@ document.addEventListener('input', (event) => {
     }
   }
   if (target.matches('[data-material-unit-select]')) {
-    const unitLabel = UNIT_LABELS[target.value] ?? target.value;
-    target.closest('form')?.querySelectorAll('[data-unit-suffix]').forEach((node) => {
-      node.textContent = unitLabel;
-    });
     updateMaterialFormPreview(target.closest('form'));
+  }
+  if (target.matches('[data-material-category-select]')) {
+    const form = target.closest('form');
+    applyMaterialFormMode(form, { syncUnit: true });
+    updateMaterialFormPreview(form);
   }
   if (target.matches('[data-material-price-source]')) {
     updateMaterialFormPreview(target.closest('form'));
@@ -3351,6 +3416,14 @@ document.addEventListener('input', (event) => {
 document.addEventListener('change', (event) => {
   const target = event.target;
   if (!(target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement || target instanceof HTMLSelectElement)) return;
+  if (target.matches('[data-material-unit-select]')) {
+    updateMaterialFormPreview(target.closest('form'));
+  }
+  if (target.matches('[data-material-category-select]')) {
+    const form = target.closest('form');
+    applyMaterialFormMode(form, { syncUnit: true });
+    updateMaterialFormPreview(form);
+  }
   saveFormDraft(target.closest('form[data-action]'));
 });
 
@@ -3486,7 +3559,10 @@ async function createMaterial(form) {
   const userId = requireUserId();
   const packageCost = toNumber(data.get('package_cost'));
   const packageQuantity = toNumber(data.get('package_quantity'));
-  const initialStock = toNumber(data.get('initial_stock'));
+  const category = String(data.get('category'));
+  const unit = category === 'depreciation' ? 'use' : String(data.get('unit'));
+  const initialStockRaw = String(data.get('initial_stock') ?? '').trim();
+  const initialStock = initialStockRaw ? toNumber(initialStockRaw) : category === 'depreciation' ? packageQuantity : 0;
   const file = data.get('photo');
   const duplicatePhotoPath = optionalString(data.get('duplicate_photo_path'));
   const photoPath = file instanceof File && file.size ? await uploadPhoto(file, 'materials') : duplicatePhotoPath;
@@ -3496,8 +3572,8 @@ async function createMaterial(form) {
     .insert({
       user_id: userId,
       name: String(data.get('name')).trim(),
-      category: String(data.get('category')),
-      unit: String(data.get('unit')),
+      category,
+      unit,
       package_cost: packageCost,
       package_quantity: packageQuantity,
       min_stock: toNumber(data.get('min_stock')),
@@ -3537,6 +3613,8 @@ async function updateMaterial(form) {
 
   const packageCost = toNumber(data.get('package_cost'));
   const packageQuantity = toNumber(data.get('package_quantity'));
+  const category = String(data.get('category'));
+  const unit = category === 'depreciation' ? 'use' : String(data.get('unit'));
   const file = data.get('photo');
   const nextPhotoPath = file instanceof File && file.size ? await uploadPhoto(file, 'materials') : material.photo_path;
 
@@ -3544,8 +3622,8 @@ async function updateMaterial(form) {
     .from('materials')
     .update({
       name: String(data.get('name')).trim(),
-      category: String(data.get('category')),
-      unit: String(data.get('unit')),
+      category,
+      unit,
       package_cost: packageCost,
       package_quantity: packageQuantity,
       min_stock: toNumber(data.get('min_stock')),
@@ -4299,6 +4377,10 @@ function nullableNumber(value) {
   if (!text) return null;
   const number = Number(text);
   return Number.isFinite(number) ? number : null;
+}
+
+function getUnitPriceLabel(unit) {
+  return UNIT_PRICE_LABELS[unit] ?? UNIT_LABELS[unit] ?? unit;
 }
 
 function optionalString(value) {
