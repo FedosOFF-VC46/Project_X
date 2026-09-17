@@ -33,7 +33,8 @@ jobs:
         run: |
           node --check src/main.js
           node --check src/equipment.js
-          node --test tests/equipment.test.mjs
+          node --check src/select-popup.js
+          node --test tests/*.test.mjs
 
       - name: Setup Pages
         uses: actions/configure-pages@v5

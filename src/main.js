@@ -3,6 +3,7 @@ import { supabase } from './supabaseClient.js';
 import { initResinScene } from './scene.js';
 import { createEquipmentSystem } from './equipment.js?v=instance-control-1';
 import { filterInventory } from './equipment-math.js?v=instance-control-1';
+import { createSelectPopup } from './select-popup.js?v=popup-1';
 
 const app = document.querySelector('#app');
 const toastZone = document.querySelector('#toast-zone');
@@ -11,6 +12,7 @@ const THEME_KEY = 'resin-workshop-theme';
 const FORM_DRAFTS_KEY = 'resin-workshop-form-drafts-v1';
 const PRODUCT_CATEGORIES_KEY = 'resin-workshop-product-categories-v1';
 const LABOR_RATE_PER_HOUR = 200;
+const selectPopup = createSelectPopup();
 
 const state = {
   booted: false,
@@ -344,6 +346,7 @@ async function hydratePhotoUrls() {
 
 function render() {
   if (!state.booted) return;
+  closeCustomSelects();
   app.innerHTML = state.user ? renderShell() : renderAuth();
   restoreFormDrafts();
   requestAnimationFrame(() => {
@@ -2624,12 +2627,15 @@ function enhanceSelects() {
         <span class="select-ui-value"></span>
         <span class="select-ui-mark" aria-hidden="true"></span>
       </button>
-      <div class="select-ui-menu" role="listbox">
+      <div class="select-ui-menu" role="listbox" hidden inert>
         <input class="select-ui-search" data-select-search type="search" placeholder="Найти" aria-label="Фильтр списка" />
         <div class="select-ui-options"></div>
       </div>
     `;
 
+    const popup = shell.querySelector('.select-ui-menu');
+    popup.id = `select-menu-${crypto.randomUUID()}`;
+    shell.querySelector('[data-select-toggle]').setAttribute('aria-controls', popup.id);
     const menu = shell.querySelector('.select-ui-options');
     [...select.options].forEach((option) => {
       const item = document.createElement('button');
@@ -2664,18 +2670,16 @@ function syncCustomSelect(select) {
   });
 }
 
-function closeCustomSelects() {
-  document.querySelectorAll('.select-ui.is-open').forEach((shell) => {
-    shell.classList.remove('is-open');
-    shell.querySelector('[data-select-toggle]')?.setAttribute('aria-expanded', 'false');
-  });
+function closeCustomSelects(options) {
+  selectPopup.close(options);
 }
 
 function filterCustomSelect(input) {
   const query = input.value.trim().toLowerCase();
-  input.closest('.select-ui')?.querySelectorAll('[data-select-option]').forEach((option) => {
+  input.closest('.select-ui-menu')?.querySelectorAll('[data-select-option]').forEach((option) => {
     option.hidden = !option.textContent.toLowerCase().includes(query);
   });
+  selectPopup.position();
 }
 
 function updateMaterialFormPreview(form) {
@@ -3211,22 +3215,15 @@ document.addEventListener('click', async (event) => {
     const shell = selectToggle.closest('.select-ui');
     const willOpen = !shell?.classList.contains('is-open');
     closeCustomSelects();
-    if (shell && willOpen) {
-      const search = shell.querySelector('[data-select-search]');
-      if (search instanceof HTMLInputElement) {
-        search.value = '';
-        filterCustomSelect(search);
-      }
-      shell.classList.add('is-open');
-      selectToggle.setAttribute('aria-expanded', 'true');
-    }
+    if (shell && willOpen) selectPopup.open(shell);
     return;
   }
 
   const selectOption = event.target.closest('[data-select-option]');
   if (selectOption) {
-    const shell = selectOption.closest('.select-ui');
+    const shell = selectPopup.owner(selectOption);
     const select = shell?.previousElementSibling;
+    closeCustomSelects({ restoreFocus: true });
     if (select instanceof HTMLSelectElement && !selectOption.hasAttribute('disabled')) {
       select.value = selectOption.dataset.value ?? '';
       syncCustomSelect(select);
@@ -3237,7 +3234,7 @@ document.addEventListener('click', async (event) => {
     return;
   }
 
-  if (!event.target.closest('.select-ui')) closeCustomSelects();
+  if (!selectPopup.owner(event.target)) closeCustomSelects();
 
   const viewButton = event.target.closest('[data-view]');
   if (viewButton) {
@@ -3523,6 +3520,7 @@ document.addEventListener('change', (event) => {
 });
 
 document.addEventListener('keydown', (event) => {
+  if (selectPopup.keydown(event)) return;
   if (event.key === 'Tab') { equipment.keydown(event); return; }
   if (event.key !== 'Escape') return;
   const openedSelect = document.querySelector('.select-ui.is-open');

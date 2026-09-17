@@ -70,6 +70,7 @@ export const supabase = {
 
 const browser = await chromium.launch({ headless: true, ...(process.env.BROWSER_PATH ? { executablePath: process.env.BROWSER_PATH } : {}) });
 const context = await browser.newContext({ viewport: { width: 1440, height: 1040 }, reducedMotion: 'reduce' });
+if (process.env.SELECT_POPOVER_FALLBACK) await context.addInitScript(() => { HTMLElement.prototype.showPopover = undefined; });
 const errors = [];
 const page = await context.newPage();
 const screenshot = async (name) => {
@@ -82,9 +83,26 @@ await page.route('**/src/scene.js', (route) => route.fulfill({ contentType: 'app
 if (process.env.LUCIDE_FILE) await page.route('https://cdn.jsdelivr.net/npm/lucide@*/dist/umd/lucide.min.js', (route) => route.fulfill({ contentType: 'application/javascript', path: process.env.LUCIDE_FILE }));
 await page.route('https://*.supabase.co/**', (route) => { errors.push('Unexpected live backend call'); return route.abort(); });
 
+const verifyOpenMenu = async () => {
+  const menuSelector = '.select-ui.is-open .select-ui-menu, .select-ui-menu.is-floating';
+  await page.waitForFunction((selector) => {
+    const menu = document.querySelector(selector);
+    return menu && getComputedStyle(menu).opacity === '1';
+  }, menuSelector);
+  const visible = await page.locator(menuSelector).evaluate((menu) => {
+    const rect = menu.getBoundingClientRect();
+    const search = menu.querySelector('[data-select-search]');
+    const field = search.getBoundingClientRect();
+    return { left: rect.left, right: rect.right, top: rect.top, bottom: rect.bottom, width: innerWidth, height: innerHeight,
+      searchVisible: document.elementFromPoint(field.left + field.width / 2, field.top + field.height / 2) === search };
+  });
+  assert.ok(visible.left >= 0 && visible.right <= visible.width + 1 && visible.top >= 0 && visible.bottom <= visible.height + 1, JSON.stringify(visible));
+  assert.equal(visible.searchVisible, true, `Dropdown clipped by an ancestor: ${JSON.stringify(visible)}`);
+};
 const clickSelect = async (selector, text) => {
   await page.locator(`${selector} + .select-ui [data-select-toggle]`).click();
-  await page.locator('.select-ui.is-open').getByRole('option', { name: text, exact: true }).click();
+  await verifyOpenMenu();
+  await page.locator('.select-ui.is-open .select-ui-menu, .select-ui-menu.is-floating').getByRole('option', { name: text, exact: true }).click();
 };
 const noOverflow = async () => {
   const result = await page.evaluate(() => ({ width: innerWidth, scroll: document.documentElement.scrollWidth,
@@ -182,9 +200,49 @@ try {
   assert.equal(await page.locator('[data-eq-confirm]').isEnabled(), false);
   await page.locator('[data-eq-production-tool="pending"]').uncheck();
   await page.locator('[data-eq-production-tool="mold"]').check();
-  await clickSelect('[data-eq-preference="mold"]', 'Молд №2 · осталось 10 изделий');
+  const moldToggle = page.locator('[data-eq-preference="mold"] + .select-ui [data-select-toggle]');
+  await moldToggle.click();
+  await verifyOpenMenu();
+  const menu = page.locator('.select-ui-menu.is-floating');
+  await page.screenshot({ path: `${output}/dropdown-desktop.png`, animations: 'disabled' });
+  await menu.locator('[data-select-search]').fill('№2');
+  assert.equal(await menu.locator('[data-select-option]:not([hidden])').count(), 1);
+  await menu.locator('[data-select-search]').press('ArrowDown');
+  assert.equal(await menu.getByRole('option', { name: 'Молд №2 · осталось 10 изделий' }).evaluate((el) => el===document.activeElement), true);
+  await page.keyboard.press('Enter');
   assert.doesNotMatch(await page.locator('[data-eq-production-result]').textContent(), /Молд №1/);
+  assert.equal(await moldToggle.getAttribute('aria-expanded'), 'false');
+  await moldToggle.press('ArrowDown');
+  await verifyOpenMenu();
+  await page.keyboard.press('Escape');
+  assert.equal(await page.locator('.eq-layer').count(), 1, 'Escape should close the list, not the form');
+  assert.equal(await moldToggle.evaluate((el) => el===document.activeElement), true);
+  await moldToggle.click();
+  await page.locator('.eq-production-title').click();
+  assert.equal(await page.locator('.select-ui-menu.is-floating').count(), 0);
+  await moldToggle.click();
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.waitForFunction(() => {
+    const menu=document.querySelector('.select-ui-menu.is-floating');
+    return menu && menu.getBoundingClientRect().right<=innerWidth;
+  });
+  await verifyOpenMenu();
+  await page.screenshot({ path: `${output}/dropdown-mobile.png`, animations: 'disabled' });
+  await page.keyboard.press('Escape');
+  // Put the trigger near the bottom of a short screen to require upward placement.
+  await page.setViewportSize({ width: 800, height: 500 });
+  await moldToggle.scrollIntoViewIfNeeded();
+  await moldToggle.click();
+  await verifyOpenMenu();
+  assert.equal(await menu.getAttribute('data-placement'), 'above');
+  await page.keyboard.press('Escape');
+  await page.setViewportSize({ width: 1440, height: 1040 });
   await clickSelect('[data-eq-preference="mold"]', 'Автоматически: сначала начатые');
+  await moldToggle.click();
+  await page.locator('.eq-production-choices').evaluate((list) => { list.style.maxHeight='80px'; list.scrollTop=list.scrollHeight; });
+  await page.waitForFunction(() => !document.querySelector('.select-ui-menu.is-floating'));
+  await page.locator('.eq-production-choices').evaluate((list) => { list.style.maxHeight=''; list.scrollTop=0; });
+  assert.equal(await page.locator('[data-eq-preference="mold"]').inputValue(), '', 'scroll must not change the selection');
   await page.locator('[data-eq-production-tool="scales"]').uncheck();
   await page.locator('[data-eq-action="production-back"]').click();
   await page.locator('[data-eq-action="production-next"]').click();
