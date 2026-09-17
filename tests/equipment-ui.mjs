@@ -38,7 +38,9 @@ const data = { materials, products, tool_models: toolModels, tool_instances: too
 };
 
 const mockSource = `
-const db = ${JSON.stringify(data)};
+const db = JSON.parse(sessionStorage.getItem('category-test-db') || 'null') || ${JSON.stringify(data)};
+db.product_categories ||= [];
+window.__testDb = db;
 window.__rpcCalls = [];
 function addRows(modelId, rows) {
  const model=db.tool_models.find(row=>row.id===modelId);
@@ -56,7 +58,23 @@ export const supabase = {
  from: table => new Query(table),
  storage: { from:()=>({createSignedUrl:async()=>({data:null})}) },
  rpc: async(name, args) => {
-  window.__rpcCalls.push({name,args});
+  if(name!=='list_product_categories') window.__rpcCalls.push({name,args});
+  if(name==='list_product_categories') {
+    const defaults={accessories:'Аксессуары',notebooks:'Блокноты',coasters:'Подстаканники',dishes:'Блюда',christmas:'Новогодние игрушки',keychains:'Брелоки'};
+    for(const [id,label] of Object.entries(defaults)) if(!db.product_categories.some(row=>row.id===id)) db.product_categories.push({id,label});
+    for(const row of args.p_legacy||[]) if(!db.product_categories.some(item=>item.id===row.id)) db.product_categories.push({...row});
+    return {data:db.product_categories,error:null};
+  }
+  if(name==='create_product_category') {
+    const id='section-'+crypto.randomUUID(); db.product_categories.push({id,label:args.p_label});
+    sessionStorage.setItem('category-test-db',JSON.stringify(db)); return {data:id,error:null};
+  }
+  if(name==='remove_product_category') {
+    if(window.__categoryFailure) return {data:null,error:{message:'Состав раздела изменился. Обновите страницу и проверьте список изделий перед удалением'}};
+    db.products.filter(row=>row.is_active && row.product_category===args.p_category_id).forEach(row=>{ if(args.p_target_id) row.product_category=args.p_target_id; else if(args.p_delete_products) row.is_active=false; });
+    db.product_categories.find(row=>row.id===args.p_category_id).deleted_at='${day}';
+    sessionStorage.setItem('category-test-db',JSON.stringify(db)); return {data:args.p_expected_product_ids.length,error:null};
+  }
   if(name==='save_product_tools') db.product_tools = db.product_tools.filter(row=>row.product_id!==args.p_product_id).concat(args.p_tools.map(row=>({...row,product_id:args.p_product_id,user_id:'test-user',quantity_per_item:1})));
   if(name==='save_tool_model') { const id=args.p_model_id||'new-model'; const m={id,user_id:'test-user',...args.p_data,default_resource:Number(args.p_data.resource_limit),default_cost:Number(args.p_data.purchase_cost)}; const index=db.tool_models.findIndex(row=>row.id===id); if(index>=0) db.tool_models[index]=m; else db.tool_models.push(m); addRows(id,args.p_data.instances||[]); return {data:id,error:null}; }
   if(name==='add_tool_instance_rows') addRows(args.p_model_id,args.p_instances);
@@ -343,6 +361,100 @@ try {
   await page.locator('[data-eq-action="close"]').last().click();
   await page.locator('[data-action="toggle-theme"]').first().click();
   await screenshot('tools-light');
+
+  // Categories: safe default, cancel, transfer, confirmed deletion and reload persistence.
+  await page.locator('[data-view="products"]').first().click();
+  await page.locator('[data-category="coasters"][data-action="set-product-category"]').click();
+  await page.locator('[data-action="open-category-delete"]').click();
+  const removal = page.locator('.category-delete-form');
+  assert.equal(await removal.locator('[value="move"]').isChecked(), true);
+  assert.equal(await removal.locator('[type="submit"]').isDisabled(), true);
+  assert.match(await removal.textContent(), /На складе: 3 шт/);
+  await screenshot('category-transfer-light');
+  await removal.locator('[value="delete"]').check();
+  assert.equal(await removal.locator('[type="submit"]').isDisabled(), true);
+  await removal.locator('[name="confirm_product_deletion"]').check();
+  assert.equal(await removal.locator('[type="submit"]').isEnabled(), true);
+  await page.keyboard.press('Escape');
+  assert.equal(await page.locator('[data-category-delete-dialog]').count(), 0);
+  assert.equal(await page.locator('[data-action="open-category-delete"]').evaluate(el=>el===document.activeElement), true);
+  await page.locator('[data-action="open-category-delete"]').click();
+  assert.equal(await removal.locator('[value="move"]').isChecked(), true);
+  assert.equal(await removal.locator('[name="confirm_product_deletion"]').isChecked(), false);
+  assert.equal(await page.evaluate(()=>window.__rpcCalls.filter(call=>call.name==='remove_product_category').length), 0);
+  await clickSelect('[name="target_category"]', 'Аксессуары');
+  await page.evaluate(()=>{window.__categoryFailure=true;});
+  await removal.locator('[type="submit"]').click();
+  await removal.locator('[data-category-delete-error]:not([hidden])').waitFor();
+  assert.match(await removal.locator('[data-category-delete-error]').textContent(), /Состав раздела изменился/);
+  assert.equal(await removal.locator('[name="target_category"]').inputValue(), 'accessories');
+  await page.evaluate(()=>{window.__categoryFailure=false;});
+  await removal.locator('[type="submit"]').click();
+  await page.locator('[data-category-delete-dialog]').waitFor({state:'detached'});
+  assert.equal(await page.locator('.product-category-tab[data-category="coasters"]').count(), 0);
+  assert.equal(await page.locator('.product-library-card').count(), 2);
+  const transfer = await page.evaluate(()=>window.__rpcCalls.filter(call=>call.name==='remove_product_category').at(-1).args);
+  assert.deepEqual(transfer,{p_category_id:'coasters',p_target_id:'accessories',p_delete_products:false,p_expected_product_ids:['coaster']});
+  const transferred = await page.evaluate(()=>window.__testDb.products.find(row=>row.id==='coaster'));
+  assert.equal(transferred.current_stock,3);
+  assert.equal(transferred.markup_percent,120);
+  await page.reload();
+  await page.locator('[data-view="products"]').first().click();
+  assert.equal(await page.locator('.product-category-tab[data-category="coasters"]').count(), 0);
+  await page.locator('.product-category-tab[data-category="accessories"]').click();
+  assert.equal(await page.locator('.product-library-card').count(), 2);
+
+  await page.locator('[data-action="open-product-category-editor"]').click();
+  await page.locator('[name="category_name"]').fill('Ошибочный раздел');
+  await page.locator('[data-action="create-product-category"] [type="submit"]').click();
+  await page.locator('[data-action="create-product-category"]').waitFor({state:'detached'});
+  await page.locator('[data-action="open-category-delete"]').click();
+  assert.match(await removal.textContent(), /Раздел пуст/);
+  assert.equal(await removal.locator('[name="category_removal_mode"]').count(),0);
+  await removal.locator('[type="submit"]').click();
+  await page.locator('[data-category-delete-dialog]').waitFor({state:'detached'});
+  assert.equal(await page.getByRole('button',{name:/Ошибочный раздел/}).count(),0);
+
+  await page.locator('.product-category-tab[data-category="accessories"]').click();
+  await page.locator('[data-action="toggle-theme"]').first().click();
+  await page.locator('[data-action="open-category-delete"]').click();
+  await removal.locator('[value="delete"]').check();
+  await screenshot('category-delete-dark');
+  await page.setViewportSize({width:390,height:844});
+  await noOverflow();
+  await screenshot('category-delete-mobile');
+  await removal.locator('[name="confirm_product_deletion"]').check();
+  await removal.locator('[type="submit"]').click();
+  await page.locator('[data-category-delete-dialog]').waitFor({state:'detached'});
+  assert.equal(await page.locator('.product-category-tab[data-category="accessories"]').count(),0);
+  const deleted = await page.evaluate(()=>window.__rpcCalls.filter(call=>call.name==='remove_product_category').at(-1).args);
+  assert.equal(deleted.p_delete_products,true);
+  assert.deepEqual(deleted.p_expected_product_ids,['coaster','earrings']);
+  await page.locator('[data-view="warehouse"]').first().click();
+  await page.locator('[data-warehouse="products"]').click();
+  assert.equal(await page.locator('[data-warehouse-results] .material-card').count(),0);
+  await page.reload();
+  await page.locator('[data-view="products"]').first().click();
+  assert.equal(await page.locator('.product-category-tab[data-category="accessories"]').count(),0);
+  assert.equal(await page.locator('.product-library-card').count(),0);
+
+  // Removing the final section must not restore a default category.
+  while(await page.locator('.product-category-tab').count()) {
+    await page.locator('.product-category-tab').first().click();
+    await page.locator('[data-action="open-category-delete"]').click();
+    await removal.locator('[type="submit"]').click();
+    await page.locator('[data-category-delete-dialog]').waitFor({state:'detached'});
+  }
+  await page.reload();
+  await page.locator('[data-view="products"]').first().click();
+  assert.match(await page.locator('#app').textContent(), /Разделов пока нет/);
+  await page.locator('[data-action="open-product-category-editor"]').click();
+  await page.locator('[name="category_name"]').fill('Аксессуары');
+  await page.locator('[data-action="create-product-category"] [type="submit"]').click();
+  await page.locator('[data-action="create-product-category"]').waitFor({state:'detached'});
+  assert.equal(await page.locator('.product-category-tab').count(),1);
+  assert.equal(await page.locator('.product-library-card').count(),0);
+  await noOverflow();
   assert.deepEqual(errors, []);
   console.log(`UI scenarios passed. Screenshots: ${output}`);
 } finally { await browser.close(); }

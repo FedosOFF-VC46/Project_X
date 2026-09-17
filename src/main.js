@@ -37,7 +37,7 @@ const state = {
   toolEvents: [],
   photoUrls: new Map(),
   formDrafts: readFormDrafts(),
-  customProductCategories: readCustomProductCategories(),
+  productCategories: [],
   activeProductId: null,
   auth: {
     registrationOpen: false,
@@ -58,6 +58,7 @@ const state = {
     duplicatingProductId: null,
     editingProductId: null,
     categoryEditorOpen: false,
+    deletingCategory: null,
     activeCategory: 'coasters',
   },
   calculator: {
@@ -192,6 +193,8 @@ async function setSession(session) {
 }
 
 function resetWorkspace() {
+  state.productCategories = [];
+  state.productDesigner.deletingCategory = null;
   state.materials = [];
   state.products = [];
   state.productMaterials = [];
@@ -230,9 +233,10 @@ async function loadWorkspace() {
     moldCalculations,
     moldCalculationItems,
     toolModels, toolInstances, productTools, toolEvents,
+    productCategories,
   ] = await Promise.all([
     supabase.from('materials').select('*').eq('user_id', userId).eq('is_active', true).order('created_at', { ascending: false }),
-    supabase.from('products').select('*').eq('user_id', userId).order('created_at', { ascending: false }),
+    supabase.from('products').select('*').eq('user_id', userId).eq('is_active', true).order('created_at', { ascending: false }),
     supabase
       .from('product_materials')
       .select('*, materials(id, name, unit, unit_price, current_stock, category)')
@@ -282,6 +286,7 @@ async function loadWorkspace() {
     supabase.from('tool_instances').select('*').eq('user_id', userId).order('created_at'),
     supabase.from('product_tools').select('*').eq('user_id', userId),
     supabase.from('tool_events').select('*').eq('user_id', userId).order('created_at', { ascending: false }).limit(200),
+    supabase.rpc('list_product_categories', { p_legacy: readCustomProductCategories() }),
   ]);
 
   const result = [
@@ -296,6 +301,7 @@ async function loadWorkspace() {
     moldCalculations,
     moldCalculationItems,
     toolModels, toolInstances, productTools, toolEvents,
+    productCategories,
   ];
   const failed = result.find((response) => response.error);
   if (failed) {
@@ -303,6 +309,8 @@ async function loadWorkspace() {
   } else {
     state.materials = materials.data ?? [];
     state.products = products.data ?? [];
+    state.productCategories = productCategories.data ?? [];
+    migrateLegacyCategoryStorage();
     state.productMaterials = (productMaterials.data ?? []).filter((row) => row.materials?.category !== 'depreciation');
     state.calculations = calculations.data ?? [];
     state.calculationItems = calculationItems.data ?? [];
@@ -360,6 +368,11 @@ function render() {
     document.querySelectorAll('.mold-form').forEach(updateMoldComposerPreview);
     syncThemeToggles();
     equipment.afterRender();
+    const categoryDialog = document.querySelector('[data-category-delete-dialog]');
+    if (categoryDialog) {
+      updateCategoryDeleteForm(categoryDialog.querySelector('form'));
+      categoryDialog.querySelector('[data-action="close-category-delete"]').focus({ preventScroll: true });
+    }
     window.lucide?.createIcons({ attrs: { 'stroke-width': 1.8 } });
   });
 }
@@ -382,6 +395,7 @@ function writeFormDrafts() {
 
 function readCustomProductCategories() {
   try {
+    if (localStorage.getItem(`${PRODUCT_CATEGORIES_KEY}:migrated`)) return [];
     const parsed = JSON.parse(localStorage.getItem(PRODUCT_CATEGORIES_KEY) || '[]');
     return Array.isArray(parsed) ? parsed.filter((item) => item?.id && item?.label) : [];
   } catch {
@@ -389,9 +403,10 @@ function readCustomProductCategories() {
   }
 }
 
-function writeCustomProductCategories() {
+function migrateLegacyCategoryStorage() {
   try {
-    localStorage.setItem(PRODUCT_CATEGORIES_KEY, JSON.stringify(state.customProductCategories));
+    // Claim the old browser-only list once, rather than importing it into other accounts.
+    localStorage.setItem(`${PRODUCT_CATEGORIES_KEY}:migrated`, state.user.id);
   } catch (error) {
     console.warn('Category save skipped:', error);
   }
@@ -401,6 +416,7 @@ function getFormDraftKey(form) {
   const action = form?.dataset?.action;
   if (!action || !state.user) return null;
   if (action === 'auth' || action === 'signup') return null;
+  if (action === 'remove-product-category') return null;
 
   const parts = [state.user.id, action];
   ['material_id', 'product_id', 'calculation_id', 'movement_mode', 'duplicate_material_id', 'duplicate_product_id', 'product_category', 'tool_model_id', 'tool_instance_id'].forEach((name) => {
@@ -1267,6 +1283,7 @@ function renderMaterialEditor() {
 
 function renderProductsView() {
   const activeCategory = getActiveProductCategory();
+  if (!activeCategory) return `${renderProductCategoryTabs('')}<section class="panel">${renderEmpty('Разделов пока нет. Добавьте раздел, чтобы создать изделие.')}</section>${state.productDesigner.categoryEditorOpen ? renderProductCategoryDialog() : ''}`;
   const categoryProducts = getProductsByCategory(activeCategory);
   const activeProduct =
     categoryProducts.find((item) => item.id === state.activeProductId) ??
@@ -1283,7 +1300,10 @@ function renderProductsView() {
             <p class="panel-kicker">${escapeHtml(getProductCategoryLabel(activeCategory))}</p>
             <h2>${categoryProducts.length ? `${categoryProducts.length} ${pluralRu(categoryProducts.length, ['изделие', 'изделия', 'изделий'])}` : 'Раздел пуст'}</h2>
           </div>
-          <button class="ghost-button compact" data-action="open-product-creator" type="button">Новое изделие</button>
+          <div class="category-library-actions">
+            <button class="ghost-button compact" data-action="open-product-creator" type="button">Новое изделие</button>
+            <button class="category-delete-link" data-action="open-category-delete" data-category="${escapeAttr(activeCategory)}" type="button"><i data-lucide="trash-2"></i>Удалить раздел</button>
+          </div>
         </div>
         ${
           categoryProducts.length
@@ -1311,6 +1331,7 @@ function renderProductsView() {
     </section>
     ${state.productDesigner.creatorOpen ? renderProductCreatorDialog() : ''}
     ${state.productDesigner.categoryEditorOpen ? renderProductCategoryDialog() : ''}
+    ${state.productDesigner.deletingCategory ? renderCategoryDeleteDialog() : ''}
   `;
 }
 
@@ -1645,12 +1666,111 @@ function renderProductCategoryDialog() {
           </button>
         </div>
         <form class="stack-form" data-action="create-product-category">
-          <label>Название раздела<input name="category_name" required placeholder="Например: Сервировка" /></label>
+          <label>Название раздела<input name="category_name" required maxlength="120" placeholder="Например: Сервировка" /></label>
           <button class="primary-button" type="submit">Добавить раздел</button>
         </form>
       </div>
     </section>
   `;
+}
+
+function renderCategoryDeleteDialog() {
+  const category = state.productDesigner.deletingCategory;
+  const products = category.products;
+  const destinations = getProductCategories().filter((item) => item.id !== category.id);
+  const countLabel = `${products.length} ${pluralRu(products.length, ['изделие', 'изделия', 'изделий'])}`;
+  return `
+    <section class="material-editor-layer category-delete-layer">
+      <button class="registration-scrim" data-action="close-category-delete" type="button" aria-label="Отмена"></button>
+      <div class="material-editor-sheet category-delete-sheet" data-category-delete-dialog role="dialog" aria-modal="true" aria-labelledby="category-delete-title" aria-describedby="category-delete-description">
+        <div class="sheet-head">
+          <div><p class="panel-kicker">Управление разделом</p><h2 id="category-delete-title">Удалить «${escapeHtml(category.label)}»?</h2></div>
+          <button class="icon-button" data-action="close-category-delete" type="button" aria-label="Закрыть"><i data-lucide="x"></i></button>
+        </div>
+        <form class="stack-form category-delete-form" data-action="remove-product-category">
+          <p id="category-delete-description" class="category-delete-description">${products.length ? `В разделе ${countLabel}. Перенесите изделия, чтобы сохранить их, или удалите вместе с разделом.` : 'Раздел пуст. Удалится только раздел, остальные изделия останутся на месте.'}</p>
+          ${products.length ? `
+            <ul class="category-product-preview" aria-label="Изделия в разделе">${products.map((product) => `<li><span>${escapeHtml(product.name)}</span><small>На складе: ${formatQty(product.stock)} шт</small></li>`).join('')}</ul>
+            <fieldset class="category-delete-options">
+              <legend>Что сделать с изделиями?</legend>
+              <label class="category-delete-option"><input type="radio" name="category_removal_mode" value="move" checked /><span><strong>Перенести в другой раздел</strong><small>Состав, цены и остатки сохранятся</small></span><i data-lucide="folder-input"></i></label>
+              <div class="category-move-target" data-category-move>
+                ${destinations.length ? `<label>Куда перенести<select name="target_category" required><option value="">Выберите раздел</option>${destinations.map((item) => `<option value="${escapeAttr(item.id)}">${escapeHtml(item.label)}</option>`).join('')}</select></label>` : '<p>Других разделов пока нет. Отмените удаление и добавьте раздел для переноса.</p>'}
+              </div>
+              <label class="category-delete-option is-danger"><input type="radio" name="category_removal_mode" value="delete" /><span><strong>Удалить вместе с изделиями</strong><small>Карты изделий исчезнут из каталога и склада</small></span><i data-lucide="trash-2"></i></label>
+            </fieldset>
+            <div class="category-delete-warning" data-category-destroy hidden>
+              <p>Будут удалены раздел и ${countLabel}, включая их остатки на складе. История продаж и изготовления сохранится. Отменить это действие в приложении нельзя.</p>
+              <label><input type="checkbox" name="confirm_product_deletion" disabled required />Я понимаю, что изделия будут удалены</label>
+            </div>` : ''}
+          <p class="category-delete-error" role="alert" data-category-delete-error hidden></p>
+          <div class="category-delete-actions">
+            <button class="ghost-button" data-action="close-category-delete" type="button">Отмена</button>
+            <button class="${products.length ? 'primary-button' : 'danger-button'}" data-category-delete-submit type="submit" ${products.length ? 'disabled' : ''}>${products.length ? 'Перенести и удалить раздел' : 'Удалить пустой раздел'}</button>
+          </div>
+        </form>
+      </div>
+    </section>`;
+}
+
+function updateCategoryDeleteForm(form) {
+  if (!form) return;
+  const mode = form.querySelector('[name="category_removal_mode"]:checked')?.value;
+  const target = form.querySelector('[name="target_category"]');
+  const confirmation = form.querySelector('[name="confirm_product_deletion"]');
+  const submit = form.querySelector('[data-category-delete-submit]');
+  if (confirmation) {
+    const deleting = mode === 'delete';
+    form.querySelector('[data-category-move]').hidden = deleting;
+    form.querySelector('[data-category-destroy]').hidden = !deleting;
+    if (target) target.disabled = deleting;
+    confirmation.disabled = !deleting;
+    if (!deleting) confirmation.checked = false;
+    submit.className = deleting ? 'danger-button' : 'primary-button';
+    submit.textContent = deleting ? 'Удалить раздел и изделия' : 'Перенести и удалить раздел';
+    submit.disabled = form.hasAttribute('aria-busy') || (deleting ? !confirmation.checked : !target?.value);
+  }
+}
+
+function closeCategoryDeleteDialog() {
+  if (document.querySelector('.category-delete-form[aria-busy]')) return;
+  state.productDesigner.deletingCategory = null;
+  render();
+  document.querySelector('[data-action="open-category-delete"]')?.focus({ preventScroll: true });
+}
+
+async function removeProductCategory(form) {
+  const category = state.productDesigner.deletingCategory;
+  if (!category) throw new Error('Выберите раздел');
+  const values = new FormData(form);
+  const deleting = values.get('category_removal_mode') === 'delete';
+  const target = deleting ? null : optionalString(values.get('target_category'));
+  if (category.products.length && (deleting ? !values.has('confirm_product_deletion') : !target)) throw new Error('Выберите раздел для переноса или подтвердите удаление изделий');
+  const { error } = await supabase.rpc('remove_product_category', {
+    p_category_id: category.id,
+    p_target_id: target,
+    p_delete_products: deleting,
+    p_expected_product_ids: category.products.map((product) => product.id),
+  });
+  if (error) throw error;
+  state.productDesigner.deletingCategory = null;
+  state.productDesigner.activeCategory = target || getProductCategories().find((item) => item.id !== category.id)?.id || '';
+  state.activeProductId = null;
+  // Never restore an old draft pointing to a section/product just removed.
+  const deletedIds = deleting ? category.products.map((product) => product.id) : [];
+  for (const [key, draft] of Object.entries(state.formDrafts)) {
+    if (!key.startsWith(`${state.user.id}|`)) continue;
+    if (deletedIds.some((id) => key.split('|').some((part) => part.endsWith(`:${id}`)))) delete state.formDrafts[key];
+    else {
+      if (draft.product_category === category.id) draft.product_category = state.productDesigner.activeCategory;
+      const nextKey = key.split('|').map((part) => part === `product_category:${category.id}` ? `product_category:${state.productDesigner.activeCategory}` : part).join('|');
+      if (nextKey !== key) { state.formDrafts[nextKey] = draft; delete state.formDrafts[key]; }
+    }
+  }
+  writeFormDrafts();
+  state.inventory.filters.products.category = '';
+  await loadWorkspace();
+  showToast(target ? 'Изделия перенесены. Раздел удалён' : category.products.length ? 'Раздел и изделия удалены' : 'Пустой раздел удалён');
 }
 
 function renderProductTab(product) {
@@ -2999,29 +3119,22 @@ function getProductCategoryLabel(categoryId) {
 }
 
 function getProductCategories() {
-  const categories = new Map(Object.entries(PRODUCT_CATEGORY_LABELS).map(([id, label]) => [id, { id, label }]));
-  state.customProductCategories.forEach((category) => categories.set(category.id, category));
-  state.products.forEach((product) => {
-    const id = getProductCategory(product);
-    if (!categories.has(id)) categories.set(id, { id, label: id });
-  });
-  return [...categories.values()];
+  const defaults = Object.keys(PRODUCT_CATEGORY_LABELS);
+  const order = (id) => defaults.includes(id) ? defaults.indexOf(id) : defaults.length;
+  return state.productCategories.filter((category) => !category.deleted_at)
+    .sort((a, b) => order(a.id) - order(b.id));
 }
 
 function getActiveProductCategory() {
   const categories = getProductCategories();
   const active = state.productDesigner.activeCategory;
   if (categories.some((category) => category.id === active)) return active;
-  state.productDesigner.activeCategory = categories[0]?.id ?? 'coasters';
+  state.productDesigner.activeCategory = categories[0]?.id ?? '';
   return state.productDesigner.activeCategory;
 }
 
 function getProductsByCategory(categoryId) {
   return state.products.filter((product) => getProductCategory(product) === categoryId);
-}
-
-function slugifyCategory(label) {
-  return label;
 }
 
 function getProductMarkupTitle(product) {
@@ -3348,6 +3461,13 @@ document.addEventListener('click', async (event) => {
     state.productDesigner.categoryEditorOpen = true;
     render();
   }
+  if (action === 'open-category-delete') {
+    const category = getProductCategories().find((item) => item.id === actionButton.dataset.category);
+    if (!category) return;
+    state.productDesigner.deletingCategory = { ...category, products: getProductsByCategory(category.id).map((product) => ({ id: product.id, name: product.name, stock: getProductStock(product) })) };
+    render();
+  }
+  if (action === 'close-category-delete') closeCategoryDeleteDialog();
   if (action === 'close-product-category-editor') {
     state.productDesigner.categoryEditorOpen = false;
     render();
@@ -3508,6 +3628,7 @@ document.addEventListener('input', (event) => {
 document.addEventListener('change', (event) => {
   const target = event.target;
   if (!(target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement || target instanceof HTMLSelectElement)) return;
+  if (target.closest('.category-delete-form')) updateCategoryDeleteForm(target.closest('form'));
   if (target.matches('[data-material-unit-select]')) {
     updateMaterialFormPreview(target.closest('form'));
   }
@@ -3521,6 +3642,18 @@ document.addEventListener('change', (event) => {
 
 document.addEventListener('keydown', (event) => {
   if (selectPopup.keydown(event)) return;
+  const categoryDialog = document.querySelector('[data-category-delete-dialog]');
+  if (categoryDialog) {
+    if (event.key === 'Escape') { event.preventDefault(); closeCategoryDeleteDialog(); return; }
+    if (event.key === 'Tab') {
+      const controls = [...categoryDialog.querySelectorAll('button:not(:disabled),input:not(:disabled),select:not(:disabled),[tabindex="0"]')]
+        .filter((element) => element.getClientRects().length && !element.closest('[hidden],[inert]') && !element.matches('.native-select-hidden'));
+      const first = controls[0]; const last = controls.at(-1);
+      if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last?.focus(); }
+      else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus(); }
+      return;
+    }
+  }
   if (event.key === 'Tab') { equipment.keydown(event); return; }
   if (event.key !== 'Escape') return;
   const openedSelect = document.querySelector('.select-ui.is-open');
@@ -3591,7 +3724,8 @@ document.addEventListener('submit', async (event) => {
     if (action === 'stock-movement') await createStockMovement(form);
     if (action === 'create-product') await createProduct(form);
     if (action === 'update-product') await updateProduct(form);
-    if (action === 'create-product-category') createProductCategory(form);
+    if (action === 'create-product-category') await createProductCategory(form);
+    if (action === 'remove-product-category') await removeProductCategory(form);
     if (action === 'apply-mold-to-product') await applyMoldToProduct(form);
     if (action === 'add-product-material') await addProductMaterial(form);
     if (action === 'update-product-markup') await updateProductMarkup(form);
@@ -3605,8 +3739,11 @@ document.addEventListener('submit', async (event) => {
   } catch (error) {
     console.warn('Form action failed:', error);
     showToast(toUserMessage(error), 'error');
+    const inlineError = form.querySelector('[data-category-delete-error]');
+    if (inlineError) { inlineError.hidden = false; inlineError.textContent = toUserMessage(error); }
   } finally {
     setBusy(form, false);
+    if (action === 'remove-product-category') updateCategoryDeleteForm(form);
   }
 });
 
@@ -4054,19 +4191,19 @@ async function updateProduct(form) {
   showToast('Карта изделия обновлена');
 }
 
-function createProductCategory(form) {
+async function createProductCategory(form) {
   const data = new FormData(form);
   const label = String(data.get('category_name') ?? '').trim();
   if (!label) throw new Error('Укажите название раздела');
-  const id = slugifyCategory(label);
-  const exists = getProductCategories().some((category) => category.id === id || category.label.toLowerCase() === label.toLowerCase());
+  const exists = getProductCategories().some((category) => category.label.toLowerCase() === label.toLowerCase());
   if (exists) throw new Error('Такой раздел уже есть');
 
-  state.customProductCategories.push({ id, label });
+  const { data: id, error } = await supabase.rpc('create_product_category', { p_label: label });
+  if (error) throw error;
   state.productDesigner.activeCategory = id;
   state.productDesigner.categoryEditorOpen = false;
-  writeCustomProductCategories();
   form.reset();
+  await loadWorkspace();
   showToast('Раздел добавлен');
 }
 

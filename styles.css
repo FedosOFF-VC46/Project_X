@@ -2695,6 +2695,63 @@ button svg {
   justify-content: flex-end;
 }
 
+.category-library-actions {
+  display: grid;
+  justify-items: end;
+  gap: 10px;
+  flex-shrink: 0;
+}
+
+.category-delete-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border: 0;
+  padding: 5px 0;
+  background: transparent;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.category-delete-link:hover, .category-delete-link:focus-visible { color: var(--danger); }
+.category-delete-link svg { width: 14px; height: 14px; }
+.category-delete-sheet { width: min(570px, calc(100vw - 48px)); }
+.category-delete-sheet .sheet-head { align-items: start; }
+.category-delete-sheet h2 { overflow-wrap: anywhere; font-size: clamp(22px, 2.5vw, 30px); }
+.category-delete-sheet .sheet-head .icon-button { flex-shrink: 0; }
+.category-delete-description { margin: 0; color: var(--muted); line-height: 1.55; font-weight: 500; }
+.category-product-preview { list-style: none; margin: 0; padding: 0 14px; max-height: 160px; overflow: auto; border: 1px solid var(--line); border-radius: 12px; background: var(--ghost); }
+.category-product-preview li { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 6px 16px; padding: 13px 0; }
+.category-product-preview li + li { border-top: 1px solid var(--line); }
+.category-product-preview span { min-width: 0; overflow-wrap: anywhere; }
+.category-product-preview small { color: var(--muted); font-size: 12px; font-weight: 500; }
+.category-delete-options { display: grid; gap: 12px; padding: 0; margin: 0; border: 0; min-width: 0; }
+.category-delete-options legend { font-size: 13px; color: var(--muted); margin-bottom: 10px; }
+.category-delete-option { display: flex; align-items: center; gap: 12px; border: 1px solid var(--line); border-radius: 12px; padding: 16px; cursor: pointer; background: var(--panel); transition: background 180ms ease, border-color 180ms ease; }
+.category-delete-option:has(input:checked) { background: var(--ghost-hover); border-color: var(--green); }
+.category-delete-option.is-danger:has(input:checked) { background: color-mix(in srgb, var(--danger) 7%, var(--panel)); border-color: var(--danger); }
+.category-delete-option input, .category-delete-warning input { width: 18px; height: 18px; min-height: 0; margin: 0; flex-shrink: 0; accent-color: var(--green); }
+.category-delete-option span { display: grid; gap: 5px; flex: 1; min-width: 0; }
+.category-delete-option strong { color: var(--white); font-size: 14px; }
+.category-delete-option small { color: var(--muted); font-size: 12px; font-weight: 500; line-height: 1.4; }
+.category-delete-option svg { width: 20px; height: 20px; flex-shrink: 0; color: var(--muted); }
+.category-move-target { padding: 0 4px 4px; }
+.category-move-target p { font-size: 13px; color: var(--muted); margin: 0; line-height: 1.5; }
+.category-delete-warning { border: 1px solid color-mix(in srgb, var(--danger) 35%, transparent); background: color-mix(in srgb, var(--danger) 6%, var(--panel)); border-radius: 12px; padding: 16px; }
+.category-delete-warning p { color: var(--danger); font-size: 13px; font-weight: 500; line-height: 1.55; margin: 0 0 14px; }
+.category-delete-warning label { display: flex; align-items: center; gap: 10px; color: var(--white); line-height: 1.5; font-size: 13px; }
+.category-delete-warning input { accent-color: var(--danger); }
+.category-delete-error { color: var(--danger); margin: 0; font-size: 13px; line-height: 1.5; }
+.category-delete-actions { display: flex; gap: 10px; justify-content: flex-end; }
+.category-delete-actions button { min-height: 46px; }
+.category-delete-form [hidden] { display: none !important; }
+@media (max-width: 600px) {
+  .category-delete-actions { flex-direction: column-reverse; }
+  .category-library-actions { justify-items: start; }
+}
+
 .product-library-card.is-active {
   border-color: var(--line-strong);
   background: var(--ghost-hover);
