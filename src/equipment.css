@@ -95,6 +95,18 @@
 .eq-section-heading h3 { font-size: 17px; margin: 0; }
 .eq-section-heading h3 small { color: var(--muted); font-size: 12px; margin-left: 8px; }
 .eq-instance-list { display: grid; gap: 12px; }
+.eq-new-instances .eq-section-heading small { color: var(--muted); font-size: 11px; }
+[data-eq-new-instances] { display: grid; gap: 12px; }
+.eq-new-instance { display: grid; gap: 12px; padding: 16px; border: 1px solid var(--line); border-radius: 14px; background: var(--ghost); animation: eq-reveal .25s ease-out; }
+.eq-instance-remaining { font-size: 11px; color: var(--green); }
+.eq-production-tools { margin: 18px 0; }
+.eq-production-choices { display: grid; gap: 10px; max-height: 42dvh; overflow-y: auto; padding: 2px; }
+.eq-production-choice { border: 1px solid var(--line); border-radius: 14px; overflow: hidden; transition: border-color .2s, background .2s; }
+.eq-production-choice:has(input:checked) { border-color: var(--line-strong); background: var(--ghost-hover); }
+.eq-production-choice .eq-tool-choice { border: 0; border-radius: 0; background: transparent; }
+.eq-production-choice .eq-preference { margin: 0 12px 12px; font-size: 10px; }
+.eq-sheet [hidden] { display: none !important; }
+.eq-sheet [data-eq-action^="delete-"] { color: var(--danger, #d46868); margin-left: auto; }
 .eq-instance { border: 1px solid var(--line); border-radius: 15px; padding: 18px; background: var(--ghost); }
 .eq-instance-head h3 { font-size: 14px; margin: 0 0 6px; overflow-wrap: anywhere; }
 .eq-instance-head span { color: var(--green); font-size: 10px; }

@@ -1,8 +1,8 @@
 import { PHOTO_BUCKET } from './config.js';
 import { supabase } from './supabaseClient.js';
 import { initResinScene } from './scene.js';
-import { createEquipmentSystem } from './equipment.js';
-import { filterInventory } from './equipment-math.js';
+import { createEquipmentSystem } from './equipment.js?v=instance-control-1';
+import { filterInventory } from './equipment-math.js?v=instance-control-1';
 
 const app = document.querySelector('#app');
 const toastZone = document.querySelector('#toast-zone');
@@ -495,6 +495,7 @@ function escapeSelectorValue(value) {
 }
 
 function ensureDraftRows(form, draft) {
+  equipment.restoreDraftRows(form, draft);
   if (form.dataset.action !== 'save-mold-calculation') return;
   const materialValues = Array.isArray(draft['mold_material_id[]'])
     ? draft['mold_material_id[]']

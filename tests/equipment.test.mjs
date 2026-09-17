@@ -64,6 +64,27 @@ test('unconfigured legacy instruments block manufacturing', () => {
   assert.equal(plan([], 1, { models: [{ ...model, resource_mode: null, default_resource: null }] }).ready, false);
 });
 
+test('operation selection replaces product defaults without changing the recipe', () => {
+  const before = structuredClone(link);
+  assert.equal(plan([instance('a')], 1, { selectedIds: [] }).cost, 0);
+  assert.equal(plan([instance('a')], 1, { links: [], selectedIds: ['m'] }).cost, 100);
+  assert.equal(plan([instance('a')], 1, { links: [{ ...link, enabled: false }], selectedIds: ['m'] }).cost, 100);
+  assert.deepEqual(link, before);
+});
+
+test('molds are never inherited from the common set', () => {
+  assert.equal(plan([instance('a')], 1, { models: [{ ...model, kind: 'mold', is_common: true }], links: [] }).groups.length, 0);
+  assert.equal(plan([instance('a')], 1, { models: [{ ...model, kind: 'mold', is_common: true }] }).groups.length, 1);
+});
+
+test('deleted models and instances cannot contribute wear or planning cost', () => {
+  const deletedModel = { ...model, deleted_at: '2026-09-17' };
+  assert.equal(plan([instance('a')], 1, { models: [deletedModel], selectedIds: ['m'] }).cost, 0);
+  assert.equal(estimatedToolCost([deletedModel], [link], product), 0);
+  const result = plan([instance('a', { deleted_at: '2026-09-17' }), instance('b')], 1);
+  assert.equal(result.allocations[0].instance_id, 'b');
+});
+
 test('warehouse search combines category, unit and stock filters and does not mutate data', () => {
   const items = [
     { name: 'Смола прозрачная', category: 'material', unit: 'g', current_stock: 100, min_stock: 150, price: 3 },

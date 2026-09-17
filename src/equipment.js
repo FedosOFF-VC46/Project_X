@@ -1,12 +1,12 @@
 import { RESOURCE_MODES, TOOL_KINDS, number, round, resourceRemaining,
-  effectiveToolLinks, estimatedToolCost, planToolUsage } from './equipment-math.js';
+  effectiveToolLinks, estimatedToolCost, planToolUsage } from './equipment-math.js?v=instance-control-1';
 
 export function createEquipmentSystem(ctx) {
   const { state, escapeHtml: esc, formatCurrency: money, formatQty: qty } = ctx;
   const ui = { dialog: null, query: '', filter: '', production: null };
   let focusedDialog = '';
-  const models = () => state.toolModels || [];
-  const instances = () => state.toolInstances || [];
+  const models = () => (state.toolModels || []).filter((row) => !row.deleted_at);
+  const instances = () => (state.toolInstances || []).filter((row) => !row.deleted_at && models().some((model) => model.id === row.model_id));
   const links = () => state.productTools || [];
   const modelById = (id) => models().find((row) => row.id === id);
   const modelInstances = (id) => instances().filter((row) => row.model_id === id);
@@ -23,7 +23,7 @@ export function createEquipmentSystem(ctx) {
 
   function openProduction(id) {
     if (!state.products.some((product) => product.id === id)) return;
-    if (ui.production?.productId !== id) ui.production = { productId: id, quantity: 1, notes: '', preferences: {}, step: 1, requestId: crypto.randomUUID() };
+    if (ui.production?.productId !== id) ui.production = { productId: id, quantity: 1, notes: '', preferences: {}, selectedIds: effectiveToolLinks(models(), links(), id).map(({ model }) => model.id), step: 1, requestId: crypto.randomUUID() };
     ui.production.step = 1;
     state.inventory.productEditorOpen = false;
     state.calculator.dialogOpen = false;
@@ -92,6 +92,42 @@ export function createEquipmentSystem(ctx) {
       <div data-eq-results>${renderCards()}</div></section>`;
   }
 
+  function instanceDefaultName(index, model, name = model?.name) {
+    const previous = (state.toolInstances || []).filter((row) => row.model_id === model?.id).length;
+    return `${(name?.trim() || 'Инструмент').slice(0, 60)} · №${previous + index + 1}`;
+  }
+
+  function renderNewInstance(index, model) {
+    return `<div class="eq-new-instance" data-eq-new-instance="${index}">
+      <label class="eq-instance-name">Название экземпляра<input name="instance_label_${index}" maxlength="80" placeholder="${esc(instanceDefaultName(index, model))}" /></label>
+      <div class="form-grid"><label data-eq-used-field>Уже использовано<span class="input-with-suffix"><input name="instance_used_${index}" type="number" min="0" step="1" required value="0" data-eq-instance-used /><span data-eq-resource-unit>${unit(model?.resource_mode || 'items')}</span></span></label>
+      <label>Начало работы<input name="instance_started_${index}" type="date" required max="${today()}" value="${today()}" /></label></div>
+      <span class="eq-instance-remaining" data-eq-instance-remaining>Новый экземпляр</span>
+    </div>`;
+  }
+
+  function restoreDraftRows(form, draft = {}) {
+    const list = form.querySelector('[data-eq-new-instances]');
+    if (!list) return;
+    const value = draft.count ?? form.elements.count?.value;
+    if (value === '') return;
+    const count = Number(value);
+    if (!Number.isInteger(count) || count < 0 || count > 100) return;
+    const model = modelById(form.elements.tool_model_id?.value);
+    while (list.children.length < count) list.insertAdjacentHTML('beforeend', renderNewInstance(list.children.length, model));
+    while (list.children.length > count) list.lastElementChild.remove();
+  }
+
+  function instanceRows(form) {
+    return [...form.querySelectorAll('[data-eq-new-instance]')].map((row) => {
+      const index = row.dataset.eqNewInstance;
+      return { label: form.elements[`instance_label_${index}`].value.trim(),
+        used_resource: form.elements.resource_mode.value === 'days' ? 0 : number(form.elements[`instance_used_${index}`].value),
+        started_on: form.elements[`instance_started_${index}`].value,
+        purchase_cost: number(form.elements.purchase_cost.value), resource_limit: number(form.elements.resource_limit.value) };
+    });
+  }
+
   function fields(model, forInstances = false) {
     const source = state.materials.find((row) => row.id === model?.source_material_id);
     const pending = !!source && !model?.resource_mode;
@@ -107,7 +143,7 @@ export function createEquipmentSystem(ctx) {
       <label data-eq-cycle-field ${mode !== 'cycles' ? 'hidden' : ''}>Изделий за одну заливку<span class="input-with-suffix"><input name="output_per_cycle" type="number" min="1" step="1" value="${model?.output_per_cycle || 1}" data-eq-preview-source /><span>шт</span></span></label>
       <label data-eq-days-field ${mode !== 'days' ? 'hidden' : ''}>Рабочих часов в день<span class="input-with-suffix"><input name="hours_per_day" type="number" min="0.1" max="24" step="0.1" value="${model?.hours_per_day || 8}" data-eq-preview-source /><span>ч</span></span></label>
     </div>
-    ${!model?.resource_mode || forInstances ? `<div class="form-grid"><label>Начало работы<input name="started_on" type="date" required max="${today()}" value="${today()}" /></label><label data-eq-used-field ${mode === 'days' ? 'hidden' : ''}>Уже использовано<span class="input-with-suffix"><input name="used_resource" type="number" min="0" step="any" value="0" data-eq-preview-source /><span data-eq-resource-unit>${unit(mode)}</span></span></label></div>` : ''}
+    ${!model?.resource_mode || forInstances ? `<section class="eq-new-instances"><div class="eq-section-heading"><h3>Состояние каждого</h3><small>Новые начинаются с нуля</small></div><div data-eq-new-instances>${Array.from({ length: Math.min(100, count) }, (_, index) => renderNewInstance(index, model)).join('')}</div></section>` : ''}
     <div class="eq-price-preview" aria-live="polite"><span>${icon('sparkles')}<span data-eq-price-label>В себестоимость одного изделия</span></span><strong data-eq-price>0 ₽</strong></div>`;
   }
 
@@ -119,10 +155,11 @@ export function createEquipmentSystem(ctx) {
       <label>Название<input name="name" required maxlength="160" value="${esc(model?.name || '')}" placeholder="Молд для подстаканника" /></label>
       <label>Тип инструмента<select name="kind">${Object.entries(TOOL_KINDS).map(([key, label]) => `<option value="${key}" ${model?.kind === key ? 'selected' : ''}>${label}</option>`).join('')}</select></label>
       ${fields(model)}
-      <label class="eq-check"><input name="is_common" type="checkbox" ${model?.is_common ? 'checked' : ''} /><span><strong>Общий набор мастерской</strong><small>Добавлять в новые и существующие карты изделий. В каждой карте можно отключить.</small></span></label>
+      <label class="eq-check" data-eq-common ${!model || model.kind === 'mold' ? 'hidden' : ''}><input name="is_common" type="checkbox" ${model?.is_common && model.kind !== 'mold' ? 'checked' : ''} /><span><strong>Общий набор мастерской</strong><small>Предлагать для всех изделий. При изготовлении можно убрать.</small></span></label>
       <label>Примечание<textarea name="notes" rows="2" placeholder="Марка, особенности, ссылка на покупку">${esc(model?.notes || '')}</textarea></label>
       ${model?.resource_mode ? '<p class="eq-note">Цена и ресурс здесь задают расчёт для карт изделий и новых экземпляров. Ресурс существующих меняется в их карточках.</p>' : ''}
       <button type="submit" class="primary-button">${model?.resource_mode ? 'Сохранить настройки' : 'Сохранить инструмент'}</button>
+      ${model ? button('delete-model', `${icon('trash-2')} Удалить инструмент`, model.id) : ''}
     </form>`;
   }
 
@@ -133,12 +170,12 @@ export function createEquipmentSystem(ctx) {
     return `<article class="eq-instance eq-tone-${tone}"><div class="eq-instance-head"><div><h3>${esc(item.label)}</h3><span>${labels[tone]}</span></div><b>${money(item.purchase_cost)}</b></div>
       <div class="eq-progress" role="progressbar" aria-label="Остаток ресурса" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${Math.round(left / number(item.resource_limit) * 100)}"><span style="width:${left / number(item.resource_limit) * 100}%"></span></div>
       <div class="eq-instance-facts"><span>Осталось <strong>${qty(left)} из ${qty(item.resource_limit)} ${unit(item.resource_mode)}</strong></span><span>В затратах <strong>${money(item.charged_cost)}</strong></span></div>
-      <div class="eq-instance-actions">${button('instance', `${icon('sliders-horizontal')} Настроить`, item.id)}${tone !== 'retired' ? button('retire', `${icon('archive')} Списать`, item.id) : ''}</div></article>`;
+      <div class="eq-instance-actions">${button('instance', `${icon('sliders-horizontal')} Настроить`, item.id)}${tone !== 'retired' ? button('retire', `${icon('archive')} Списать`, item.id) : ''}${button('delete-instance', `${icon('trash-2')} Удалить`, item.id)}</div></article>`;
   }
 
   function renderDetail(model) {
     const all = modelInstances(model.id);
-    const events = (state.toolEvents || []).filter((event) => all.some((item) => item.id === event.instance_id)).slice(0, 12);
+    const events = (state.toolEvents || []).filter((event) => (state.toolInstances || []).some((item) => item.model_id === model.id && item.id === event.instance_id)).slice(0, 12);
     return `<div class="eq-detail-intro"><div><span class="eq-badge">${TOOL_KINDS[model.kind]} · ${RESOURCE_MODES[model.resource_mode]?.label}</span><p>${esc(model.notes || 'Ресурс и история каждого экземпляра')}</p></div>${button('model', icon('settings-2') + ' Настройки', model.id)}</div>
       <div class="eq-section-heading"><h3>Экземпляры <small>${all.length}</small></h3>${button('add-instances', `${icon('plus')} Добавить`, model.id, true)}</div>
       <div class="eq-instance-list">${all.length ? all.map(renderInstance).join('') : '<p class="eq-note">Экземпляров пока нет. Добавьте инструмент, который уже есть в мастерской.</p>'}</div>
@@ -173,12 +210,12 @@ export function createEquipmentSystem(ctx) {
   }
 
   function estimate(product) { return estimatedToolCost(models(), links(), product); }
-  function plan(product, quantity, preferences = {}) { return planToolUsage({ models: models(), instances: instances(), links: links(), product, quantity, preferences }); }
+  function plan(product, quantity, preferences = {}, selectedIds = null) { return planToolUsage({ models: models(), instances: instances(), links: links(), product, quantity, preferences, selectedIds }); }
 
   function productionResult() {
     const p = ui.production;
     const product = state.products.find((item) => item.id === p.productId);
-    const tools = plan(product, p.quantity, p.preferences);
+    const tools = plan(product, p.quantity, p.preferences, p.selectedIds);
     const material = ctx.calculateBatch(product.id, p.quantity, 0);
     const labor = number(product.work_hours) * 200 * p.quantity;
     const total = round(material.items.reduce((sum, item) => sum + item.cost, 0) + labor + tools.cost, 2);
@@ -203,11 +240,20 @@ export function createEquipmentSystem(ctx) {
     const p = ui.production;
     const product = state.products.find((row) => row.id === p.productId);
     if (!product) return '';
-    const chosen = effectiveToolLinks(models(), links(), product.id);
     return `<div class="eq-steps"><span class="is-active">1 <b>Количество</b></span><i></i><span class="${p.step === 2 ? 'is-active' : ''}">2 <b>Проверка</b></span></div>
       <form class="stack-form eq-form" data-action="eq-produce"><input type="hidden" name="product_id" value="${product.id}" />
       <div ${p.step !== 1 ? 'hidden' : ''}><label>Сколько изделий сделали<span class="input-with-suffix"><input name="production_quantity" type="number" min="1" max="100000" step="1" required value="${p.quantity}" /><span>шт</span></span></label><label>Комментарий<textarea name="production_notes" rows="2" placeholder="Например: для осенней коллекции">${esc(p.notes)}</textarea></label></div>
-      ${p.step === 2 ? `<div class="eq-production-title"><strong>${esc(product.name)}</strong><b>${qty(p.quantity)} шт</b></div><details class="eq-instance-picker"><summary>${icon('wrench')} Выбрать экземпляры <span>Автоподбор</span></summary>${chosen.map(({ model }) => `<label>${esc(model.name)}<select data-eq-preference="${model.id}"><option value="">Автоматически: сначала начатые</option>${modelInstances(model.id).filter((row) => row.status === 'active' && resourceRemaining(row) > 0).map((row) => `<option value="${row.id}" ${p.preferences[model.id] === row.id ? 'selected' : ''}>${esc(row.label)} · осталось ${qty(resourceRemaining(row))} ${unit(row.resource_mode)}</option>`).join('')}</select></label>`).join('') || '<p class="eq-note">Инструменты для изделия не выбраны.</p>'}</details><div data-eq-production-result aria-live="polite">${renderProductionResult()}</div>` : '<div class="eq-notice">На следующем шаге проверим материалы, подберём инструменты и покажем итоговую себестоимость.</div>'}
+      <div ${p.step !== 2 ? 'hidden' : ''}>
+        <div class="eq-production-title"><strong>${esc(product.name)}</strong><b>${qty(p.quantity)} шт</b></div>
+        <section class="eq-production-tools"><div class="eq-section-heading"><h3>Что использовали</h3><span class="eq-badge" data-eq-selected-count>${p.selectedIds.length} выбрано</span></div>
+          <p class="eq-note">Отметьте только нужные инструменты. Карта изделия не изменится.</p>
+          <div class="eq-production-choices">${models().map((model) => `<div class="eq-production-choice" data-eq-production-choice="${model.id}">
+            <label class="eq-tool-choice"><input type="checkbox" name="production_tool_${model.id}" data-eq-production-tool="${model.id}" ${p.selectedIds.includes(model.id) ? 'checked' : ''} /><span class="eq-icon">${icon(model.kind === 'mold' ? 'box' : 'wrench')}</span><span><strong>${esc(model.name)}</strong><small>${TOOL_KINDS[model.kind]}</small></span></label>
+            <label class="eq-preference" ${!p.selectedIds.includes(model.id) ? 'hidden' : ''}>Какой использовать первым<select name="production_instance_${model.id}" data-eq-preference="${model.id}"><option value="">Автоматически: сначала начатые</option>${modelInstances(model.id).filter((row) => row.status === 'active' && resourceRemaining(row) > 0).map((row) => `<option value="${row.id}" ${p.preferences[model.id] === row.id ? 'selected' : ''}>${esc(row.label)} · осталось ${qty(resourceRemaining(row))} ${unit(row.resource_mode)}</option>`).join('')}</select></label>
+          </div>`).join('') || '<p class="eq-note">На складе пока нет инструментов. Можно изготовить без них.</p>'}</div>
+        </section><div data-eq-production-result aria-live="polite">${renderProductionResult()}</div>
+      </div>
+      ${p.step === 1 ? '<div class="eq-notice">На следующем шаге выберите использованные инструменты и проверьте себестоимость.</div>' : ''}
       <div class="eq-dialog-footer">${p.step === 2 ? button('production-back', 'Назад') : ''}${p.step === 1 ? button('production-next', 'Проверить изготовление ' + icon('arrow-right'), '', true) : `<button class="primary-button" type="submit" data-eq-confirm ${!productionResult().ready ? 'disabled' : ''}>${icon('check')} Подтвердить изготовление</button>`}</div></form>`;
   }
 
@@ -223,11 +269,19 @@ export function createEquipmentSystem(ctx) {
     if (['instance', 'retire'].includes(type) && item) { title = type === 'retire' ? 'Списать экземпляр?' : item.label; subtitle = modelById(item.model_id)?.name; content = renderInstanceForm(item, type === 'retire'); }
     if (type === 'product-tools') { title = 'Инструменты для изделия'; subtitle = state.products.find((row) => row.id === id)?.name; content = renderProductToolForm(id); }
     if (type === 'production') { title = ui.production?.step === 2 ? 'Всё готово к изготовлению?' : 'Изготовить изделие'; subtitle = 'Производство'; content = renderProduction(); }
+    if (type === 'delete-model' && model || type === 'delete-instance' && item) {
+      title = type === 'delete-model' ? 'Удалить инструмент?' : 'Удалить этот экземпляр?';
+      subtitle = model?.name || item.label;
+      content = `<form class="stack-form eq-form" data-action="eq-delete"><input type="hidden" name="${type === 'delete-model' ? 'tool_model_id' : 'tool_instance_id'}" value="${id}" />
+        <p class="eq-notice">${type === 'delete-model' ? 'Инструмент и все его экземпляры исчезнут со склада и из выбора для изготовления.' : 'Со склада исчезнет только этот экземпляр. Остальные останутся.'} История изготовлений и их стоимость сохранятся. Дополнительного расхода не будет.</p>
+        <div class="eq-dialog-footer">${button(type === 'delete-model' ? (model.resource_mode ? 'detail' : 'model') : 'detail', 'Отмена', model?.id || item.model_id)}<button type="submit" class="danger-button">${icon('trash-2')} Удалить</button></div></form>`;
+    }
     return `<section class="material-editor-layer eq-layer" role="dialog" aria-modal="true" aria-labelledby="eq-dialog-title"><button class="registration-scrim" data-eq-action="close" type="button" aria-label="Закрыть окно"></button><div class="material-editor-sheet eq-sheet"><div class="sheet-head"><div><p class="panel-kicker">${esc(subtitle || '')}</p><h2 id="eq-dialog-title">${esc(title)}</h2></div><button class="icon-button" type="button" data-eq-action="close" aria-label="Закрыть">${icon('x')}</button></div>${content}</div></section>`;
   }
 
   function preview(form) {
     if (!form?.classList.contains('eq-form')) return;
+    restoreDraftRows(form);
     const mode = form.elements.resource_mode?.value || 'items';
     form.querySelectorAll('[data-eq-resource-unit]').forEach((node) => { node.textContent = unit(mode); });
     const resourceLabel = form.querySelector('[data-eq-resource-label]');
@@ -238,10 +292,22 @@ export function createEquipmentSystem(ctx) {
     }
     const cycle = form.querySelector('[data-eq-cycle-field]'); if (cycle) cycle.hidden = mode !== 'cycles';
     const days = form.querySelector('[data-eq-days-field]'); if (days) days.hidden = mode !== 'days';
-    const used = form.querySelector('[data-eq-used-field]'); if (used) used.hidden = mode === 'days';
+    form.querySelectorAll('[data-eq-used-field]').forEach((node) => { node.hidden = mode === 'days'; });
+    const common = form.querySelector('[data-eq-common]');
+    if (common) { common.hidden = form.elements.kind.value === 'mold'; form.elements.is_common.disabled = common.hidden; }
     const extension = form.querySelector('[data-eq-extension]'); if (extension) { extension.hidden = form.elements.operation.value !== 'extend'; form.elements.amount.required = !extension.hidden; }
     const limit = number(form.elements.resource_limit?.value);
     const cost = number(form.elements.purchase_cost?.value);
+    const model = modelById(form.elements.tool_model_id?.value);
+    form.querySelectorAll('[data-eq-new-instance]').forEach((row) => {
+      const index = Number(row.dataset.eqNewInstance);
+      form.elements[`instance_label_${index}`].placeholder = instanceDefaultName(index, model, form.elements.name?.value || model?.name);
+      const usedField = form.elements[`instance_used_${index}`];
+      usedField.step = mode === 'hours' ? 'any' : '1'; usedField.max = limit || ''; usedField.disabled = mode === 'days';
+      const start = form.elements[`instance_started_${index}`].value;
+      const left = resourceRemaining({ resource_mode: mode, resource_limit: limit, used_resource: number(usedField.value), started_on: start });
+      row.querySelector('[data-eq-instance-remaining]').textContent = limit > 0 ? `Останется ${qty(left)} из ${qty(limit)} ${unit(mode)}` : 'Укажите ресурс инструмента выше';
+    });
     const output = number(form.elements.output_per_cycle?.value) || 1;
     const rate = limit > 0 ? cost / limit / (mode === 'cycles' ? output : mode === 'days' ? number(form.elements.hours_per_day?.value) || 8 : 1) : 0;
     const priceLabel = form.querySelector('[data-eq-price-label]');
@@ -251,10 +317,11 @@ export function createEquipmentSystem(ctx) {
 
   function afterRender() {
     document.querySelectorAll('.eq-form').forEach(preview);
-    if (ui.dialog?.type === 'production' && ui.production?.step === 1) {
+    if (ui.dialog?.type === 'production' && ui.production) {
       const form = document.querySelector('[data-action="eq-produce"]');
       ui.production.quantity = number(form?.elements.production_quantity.value);
       ui.production.notes = form?.elements.production_notes.value || '';
+      syncProduction(form);
     }
     const key = ui.dialog ? `${ui.dialog.type}:${ui.dialog.id}:${ui.production?.step}` : '';
     if (key !== focusedDialog && ui.dialog) {
@@ -269,6 +336,16 @@ export function createEquipmentSystem(ctx) {
     if (target) { target.innerHTML = renderCards(); ctx.icons(); }
   }
 
+  function syncProduction(form) {
+    if (!form || !ui.production) return;
+    ui.production.selectedIds = [...form.querySelectorAll('[data-eq-production-tool]:checked')].map((field) => field.dataset.eqProductionTool);
+    form.querySelectorAll('[data-eq-preference]').forEach((field) => { ui.production.preferences[field.dataset.eqPreference] = field.value; });
+    form.querySelectorAll('[data-eq-production-choice]').forEach((row) => { row.querySelector('.eq-preference').hidden = !ui.production.selectedIds.includes(row.dataset.eqProductionChoice); });
+    form.querySelector('[data-eq-selected-count]').textContent = `${ui.production.selectedIds.length} выбрано`;
+    form.querySelector('[data-eq-production-result]').innerHTML = renderProductionResult();
+    const confirm = form.querySelector('[data-eq-confirm]'); if (confirm) confirm.disabled = !productionResult().ready;
+  }
+
   function input(target) {
     if (target.matches('[data-eq-search]')) { ui.query = target.value; updateResults(); return true; }
     if (target.matches('[data-eq-choice-search]')) {
@@ -277,11 +354,7 @@ export function createEquipmentSystem(ctx) {
     if (!target.closest('.eq-form')) return false;
     if (ui.production && target.name === 'production_quantity') ui.production.quantity = number(target.value);
     if (ui.production && target.name === 'production_notes') ui.production.notes = target.value;
-    if (target.dataset.eqPreference && ui.production) {
-      ui.production.preferences[target.dataset.eqPreference] = target.value;
-      document.querySelector('[data-eq-production-result]').innerHTML = renderProductionResult();
-      document.querySelector('[data-eq-confirm]').disabled = !productionResult().ready;
-    }
+    if ((target.dataset.eqPreference || target.dataset.eqProductionTool) && ui.production) syncProduction(target.closest('form'));
     preview(target.closest('form'));
     return false;
   }
@@ -291,7 +364,7 @@ export function createEquipmentSystem(ctx) {
     if (!node) return false;
     const action = node.dataset.eqAction, id = node.dataset.id;
     if (action === 'close') { ui.dialog = null; ctx.render(); }
-    if (['model', 'detail', 'instance', 'retire', 'add-instances', 'product-tools'].includes(action)) open(action, id);
+    if (['model', 'detail', 'instance', 'retire', 'add-instances', 'product-tools', 'delete-model', 'delete-instance'].includes(action)) open(action, id);
     if (action === 'filter' || action === 'reset-filter') {
       ui.filter = action === 'filter' ? id : ''; if (action === 'reset-filter') ui.query = '';
       ctx.render();
@@ -322,13 +395,19 @@ export function createEquipmentSystem(ctx) {
       const existing = modelById(id);
       const payload = Object.fromEntries(data);
       payload.resource_mode = data.get('resource_mode') || existing?.resource_mode;
-      payload.is_common = data.has('is_common');
+      payload.is_common = payload.kind !== 'mold' && data.has('is_common');
+      payload.instances = instanceRows(form);
       const savedId = await rpc('save_tool_model', { p_model_id: id, p_data: payload, p_count: existing?.resource_mode ? 0 : number(data.get('count')) });
       ui.dialog = { type: 'detail', id: savedId };
     }
     if (action === 'eq-add-instances') {
-      await rpc('add_tool_instances', { p_model_id: id, p_count: number(data.get('count')), p_cost: number(data.get('purchase_cost')), p_limit: number(data.get('resource_limit')), p_started_on: data.get('started_on'), p_used: number(data.get('used_resource')) });
+      await rpc('add_tool_instance_rows', { p_model_id: id, p_instances: instanceRows(form) });
       ui.dialog = { type: 'detail', id };
+    }
+    if (action === 'eq-delete') {
+      const item = instances().find((row) => row.id === data.get('tool_instance_id'));
+      await rpc('delete_tool', { p_model_id: id, p_instance_id: item?.id || null });
+      ui.dialog = item ? { type: 'detail', id: item.model_id } : null;
     }
     if (action === 'eq-instance-action') {
       const item = instances().find((row) => row.id === data.get('tool_instance_id'));
@@ -344,13 +423,13 @@ export function createEquipmentSystem(ctx) {
       if (ui.production?.step !== 2) { ui.production.step = 2; ctx.render(); return false; }
       const result = productionResult();
       if (!result.ready) throw new Error('Проверьте материалы и ресурс инструментов');
-      await rpc('produce_with_tools', { p_product_id: result.product.id, p_quantity: ui.production.quantity,
+      await rpc('produce_selected_tools', { p_product_id: result.product.id, p_quantity: ui.production.quantity, p_selected_tools: ui.production.selectedIds,
         p_tools: result.tools.allocations.map(({ instance_id, model_id, amount }) => ({ instance_id, model_id, amount })),
         p_notes: ui.production.notes || null, p_request_id: ui.production.requestId });
       ui.dialog = null; ui.production = null;
     }
     await ctx.loadWorkspace();
-    ctx.showToast(action === 'eq-produce' ? 'Изготовление сохранено. Изделия на складе' : 'Сохранено');
+    ctx.showToast(action === 'eq-produce' ? 'Изготовление сохранено. Изделия на складе' : action === 'eq-delete' ? 'Удалено из текущего учёта. История сохранена' : 'Сохранено');
     return true;
   }
 
@@ -365,7 +444,7 @@ export function createEquipmentSystem(ctx) {
     return false;
   }
 
-  return { renderWarehouse, renderDialog, renderProductTools, estimate, plan, click, input, submit, keydown, afterRender, openProduction,
+  return { renderWarehouse, renderDialog, renderProductTools, estimate, plan, click, input, submit, keydown, afterRender, openProduction, restoreDraftRows,
     reset() { ui.dialog = null; ui.production = null; ui.query = ''; ui.filter = ''; },
     productionButton(productId) { return button('produce', icon('hammer') + ' Изготовить', productId, true); },
   };

@@ -40,6 +40,11 @@ const data = { materials, products, tool_models: toolModels, tool_instances: too
 const mockSource = `
 const db = ${JSON.stringify(data)};
 window.__rpcCalls = [];
+function addRows(modelId, rows) {
+ const model=db.tool_models.find(row=>row.id===modelId);
+ let n=db.tool_instances.filter(row=>row.model_id===modelId).length;
+ for(const row of rows) { n++; db.tool_instances.push({ ...row, user_id:'test-user', id:modelId+'-'+n, model_id:modelId, resource_mode:model.resource_mode, label:row.label||model.name+' · №'+n, status:'active', charged_cost:row.purchase_cost*row.used_resource/row.resource_limit }); }
+}
 class Query {
  constructor(table) { this.table = table; this.filters = []; }
  select() { return this; } order() { return this; } limit() { return this; }
@@ -53,7 +58,12 @@ export const supabase = {
  rpc: async(name, args) => {
   window.__rpcCalls.push({name,args});
   if(name==='save_product_tools') db.product_tools = db.product_tools.filter(row=>row.product_id!==args.p_product_id).concat(args.p_tools.map(row=>({...row,product_id:args.p_product_id,user_id:'test-user',quantity_per_item:1})));
-  if(name==='save_tool_model') { const id=args.p_model_id||'new-model'; const m={id,user_id:'test-user',...args.p_data,default_resource:Number(args.p_data.resource_limit),default_cost:Number(args.p_data.purchase_cost)}; const index=db.tool_models.findIndex(row=>row.id===id); if(index>=0) db.tool_models[index]=m; else db.tool_models.push(m); return {data:id,error:null}; }
+  if(name==='save_tool_model') { const id=args.p_model_id||'new-model'; const m={id,user_id:'test-user',...args.p_data,default_resource:Number(args.p_data.resource_limit),default_cost:Number(args.p_data.purchase_cost)}; const index=db.tool_models.findIndex(row=>row.id===id); if(index>=0) db.tool_models[index]=m; else db.tool_models.push(m); addRows(id,args.p_data.instances||[]); return {data:id,error:null}; }
+  if(name==='add_tool_instance_rows') addRows(args.p_model_id,args.p_instances);
+  if(name==='delete_tool') {
+    if(args.p_model_id) db.tool_models.find(row=>row.id===args.p_model_id).deleted_at='${day}';
+    db.tool_instances.filter(row=>args.p_model_id ? row.model_id===args.p_model_id : row.id===args.p_instance_id).forEach(row=>row.deleted_at='${day}');
+  }
   return {data:'saved',error:null};
  }
 };`;
@@ -166,10 +176,87 @@ try {
   await page.locator('[data-eq-action="production-next"]').click();
   assert.match(await page.locator('[data-eq-production-result]').textContent(), /Молд №1.*2.*Молд №2.*3/s);
   assert.equal(await page.locator('[data-eq-confirm]').isEnabled(), true);
+  await page.locator('[data-eq-production-tool="mold"]').uncheck();
+  assert.doesNotMatch(await page.locator('[data-eq-production-result]').textContent(), /Молд №/);
+  await page.locator('[data-eq-production-tool="pending"]').check();
+  assert.equal(await page.locator('[data-eq-confirm]').isEnabled(), false);
+  await page.locator('[data-eq-production-tool="pending"]').uncheck();
+  await page.locator('[data-eq-production-tool="mold"]').check();
+  await clickSelect('[data-eq-preference="mold"]', 'Молд №2 · осталось 10 изделий');
+  assert.doesNotMatch(await page.locator('[data-eq-production-result]').textContent(), /Молд №1/);
+  await clickSelect('[data-eq-preference="mold"]', 'Автоматически: сначала начатые');
+  await page.locator('[data-eq-production-tool="scales"]').uncheck();
+  await page.locator('[data-eq-action="production-back"]').click();
+  await page.locator('[data-eq-action="production-next"]').click();
+  assert.equal(await page.locator('[data-eq-production-tool="scales"]').isChecked(), false);
+  assert.equal(await page.evaluate(() => window.__rpcCalls.length), 0);
+  await page.setViewportSize({ width: 390, height: 844 });
+  await noOverflow();
+  await screenshot('production-mobile');
+  await page.setViewportSize({ width: 1440, height: 1040 });
   await screenshot('production-desktop');
   await page.locator('[data-eq-confirm]').click();
-  await page.waitForFunction(() => window.__rpcCalls.some((call)=>call.name==='produce_with_tools'));
-  assert.equal((await page.evaluate(() => window.__rpcCalls.find((call)=>call.name==='produce_with_tools').args)).p_quantity, 5);
+  await page.waitForFunction(() => window.__rpcCalls.some((call)=>call.name==='produce_selected_tools'));
+  const production = await page.evaluate(() => window.__rpcCalls.find((call)=>call.name==='produce_selected_tools').args);
+  assert.equal(production.p_quantity, 5);
+  assert.deepEqual(production.p_selected_tools, ['mold']);
+  assert.deepEqual(production.p_tools.map((row) => row.instance_id), ['mold-1', 'mold-2']);
+  await page.locator('[data-eq-action="product-tools"]').click();
+  assert.equal(await page.locator('[name="tool_ids"]:checked').count(), 2, 'operation must not change product defaults');
+  await page.locator('[data-eq-action="close"]').last().click();
+
+  await page.locator('[data-view="warehouse"]').first().click();
+  await page.locator('[data-warehouse="tools"]').click();
+  await page.locator('.eq-heading [data-eq-action="model"]').click();
+  assert.equal(await page.locator('[data-eq-common]').isVisible(), false, 'molds cannot be common');
+  await page.locator('[name="instance_used_0"]').fill('4');
+  await page.locator('[name="count"]').fill('');
+  await page.locator('[name="count"]').pressSequentially('3');
+  assert.equal(await page.locator('[data-eq-new-instance]').count(), 3);
+  assert.equal(await page.locator('[name="instance_used_0"]').inputValue(), '4', 'count edit must not reset existing wear');
+  assert.equal(await page.locator('[name="instance_used_1"]').inputValue(), '0');
+  assert.equal(await page.locator('[name="instance_label_1"]').getAttribute('placeholder'), 'Новый молд · №2');
+  await page.locator('[name="instance_label_2"]').pressSequentially('Для прозрачной смолы', { delay: 30 });
+  assert.equal(await page.locator('[name="instance_label_2"]').evaluate((el) => el===document.activeElement), true);
+  await page.locator('[data-eq-action="close"]').last().click();
+  await page.reload();
+  await page.locator('[data-view="warehouse"]').first().click();
+  await page.locator('[data-warehouse="tools"]').click();
+  await page.locator('.eq-heading [data-eq-action="model"]').click();
+  assert.equal(await page.locator('[data-eq-new-instance]').count(), 3);
+  assert.equal(await page.locator('[name="instance_used_0"]').inputValue(), '4');
+  assert.equal(await page.locator('[name="instance_label_2"]').inputValue(), 'Для прозрачной смолы');
+  await screenshot('individual-wear-desktop');
+  await page.setViewportSize({ width: 390, height: 844 });
+  await noOverflow();
+  await screenshot('individual-wear-mobile');
+  await page.setViewportSize({ width: 1440, height: 1040 });
+  await page.locator('[data-action="eq-save-model"] [type="submit"]').click();
+  await page.locator('.eq-instance').first().waitFor();
+  assert.equal(await page.locator('.eq-instance').count(), 3);
+  const created = await page.evaluate(() => window.__rpcCalls.find((call)=>call.name==='save_tool_model').args);
+  assert.deepEqual(created.p_data.instances.map((row)=>row.used_resource), [4,0,0]);
+  assert.equal(created.p_data.is_common, false);
+  await page.locator('[data-eq-action="delete-instance"][data-id="new-model-1"]').click();
+  await screenshot('delete-instance-confirmation');
+  await page.locator('[data-action="eq-delete"] [type="submit"]').click();
+  await page.waitForFunction(() => document.querySelectorAll('.eq-instance').length===2);
+  await page.locator('.eq-detail-intro [data-eq-action="model"]').click();
+  await page.locator('[data-eq-action="delete-model"]').click();
+  await page.locator('[data-action="eq-delete"] [type="submit"]').click();
+  await page.waitForFunction(() => !document.querySelector('.eq-layer'));
+  assert.equal(await page.locator('.eq-card[data-id="new-model"]').count(), 0);
+
+  await page.locator('[data-eq-action="detail"][data-id="mold"]').click();
+  await page.locator('[data-eq-action="add-instances"]').click();
+  await page.locator('[name="count"]').fill('3');
+  assert.equal(await page.locator('[name="instance_label_0"]').getAttribute('placeholder'), 'Молд для подстаканника · №3');
+  await page.locator('[name="instance_used_0"]').fill('2');
+  await page.locator('[data-action="eq-add-instances"] [type="submit"]').click();
+  await page.waitForFunction(() => document.querySelectorAll('.eq-instance').length===5);
+  const added = await page.evaluate(() => window.__rpcCalls.find((call)=>call.name==='add_tool_instance_rows').args);
+  assert.deepEqual(added.p_instances.map((row)=>row.used_resource), [2,0,0]);
+  await page.locator('[data-eq-action="close"]').last().click();
 
   await page.locator('[data-view="warehouse"]').first().click();
   await page.setViewportSize({ width: 390, height: 844 });

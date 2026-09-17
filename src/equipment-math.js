@@ -27,10 +27,12 @@ export function instanceRate(instance) {
   return remaining > 0 ? credit / remaining : 0;
 }
 
-export function effectiveToolLinks(models, links, productId) {
+export function effectiveToolLinks(models, links, productId, selectedIds = null) {
   return models.flatMap((model) => {
+    if (model.deleted_at) return [];
     const link = links.find((row) => row.product_id === productId && row.model_id === model.id);
-    return (link ? link.enabled : model.is_common)
+    const enabled = selectedIds === null ? (link ? link.enabled : model.is_common && model.kind !== 'mold') : selectedIds.includes(model.id);
+    return enabled
       ? [{ model, factor: number(link?.quantity_per_item ?? 1) }]
       : [];
   });
@@ -45,10 +47,10 @@ export function requiredResource(model, product, quantity, factor = 1) {
 }
 
 // Allocate actual wear to specific instances; never charge a purchase twice.
-export function planToolUsage({ models, instances, links, product, quantity, preferences = {}, today }) {
-  const groups = effectiveToolLinks(models, links, product.id).map(({ model, factor }) => {
+export function planToolUsage({ models, instances, links, product, quantity, preferences = {}, selectedIds = null, today }) {
+  const groups = effectiveToolLinks(models, links, product.id, selectedIds).map(({ model, factor }) => {
     const required = requiredResource(model, product, quantity, factor);
-    const candidates = instances.filter((item) => item.model_id === model.id && item.status === 'active'
+    const candidates = instances.filter((item) => item.model_id === model.id && !item.deleted_at && item.status === 'active'
       && resourceRemaining(item, today) > 0 && (!item.started_on || item.started_on <= (today || new Date()).toISOString().slice(0, 10)))
       .sort((a, b) => {
         if (a.id === preferences[model.id]) return -1;
