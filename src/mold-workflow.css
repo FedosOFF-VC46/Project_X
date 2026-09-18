@@ -1,0 +1,133 @@
+.mold-workflow {
+  --mw-ease: cubic-bezier(.22,1,.36,1);
+  width: 100%; min-width: 0; color: var(--white); position: relative;
+}
+.mold-workflow *, .mold-workflow *::before, .mold-workflow *::after { box-sizing: border-box; }
+.mold-workflow [hidden] { display: none !important; }
+.mold-workflow button { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 44px; border: 1px solid var(--line-strong); border-radius: 12px; padding: 11px 16px; background: var(--ghost); color: var(--white); font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; transition: background .24s, border-color .24s, box-shadow .3s, transform .24s var(--mw-ease); -webkit-tap-highlight-color: transparent; }
+.mold-workflow button:hover:not(:disabled) { border-color: var(--green); background: var(--ghost-hover); }
+.mold-workflow button:active:not(:disabled) { transform: translateY(1px) scale(.98); }
+.mold-workflow button:focus-visible { outline: 2px solid var(--green); outline-offset: 4px; }
+.mold-workflow button:disabled { cursor: default; opacity: .5; }
+.mold-workflow svg:not([data-mw-cube]) { width: 18px; height: 18px; flex-shrink: 0; }
+.mold-workflow .mw-primary { background: var(--green); border-color: var(--green); color: var(--black); box-shadow: 0 5px 26px color-mix(in srgb,var(--green) 10%,transparent); }
+.mold-workflow .mw-primary:hover:not(:disabled) { background: var(--green); box-shadow: 0 6px 30px color-mix(in srgb,var(--green) 22%,transparent); }
+:root[data-theme='light'] .mold-workflow .mw-primary { color: #fff; }
+.mold-workflow h2 { margin: 0; font-size: clamp(21px,2vw,28px); line-height: 1.35; letter-spacing: -.035em; }
+.mold-workflow h3 { font-family: inherit; margin: 0 0 16px; font-size: 21px; line-height: 1.35; letter-spacing: -.025em; }
+.mold-workflow p { margin: 0; }
+.mold-workflow .mw-sub { color: var(--muted); font-size: 12px; font-weight: 400; line-height: 1.65; overflow-wrap: anywhere; }
+.mold-workflow .mw-kicker { color: var(--green); font-size: 11px; text-transform: uppercase; letter-spacing: .07em; font-weight: 700; margin: 0 0 8px; }
+.mw-heading { display: flex; justify-content: space-between; gap: 20px; align-items: center; margin-bottom: 25px; }
+.mw-heading > div { min-width: 0; }
+.mw-heading .mw-sub { margin-top: 10px; }
+.mw-heading > button { flex-shrink: 0; }
+.mw-library { padding: 26px; border: 1px solid var(--line); border-radius: 20px; background: var(--panel); }
+.mw-library-grid { display: grid; grid-template-columns: repeat(auto-fill,minmax(min(100%,290px),1fr)); gap: 18px; }
+.mw-recipe { min-width: 0; padding: 22px; border: 1px solid var(--line); border-radius: 18px; background: linear-gradient(135deg,var(--ghost-hover),transparent 70%),var(--panel-strong); display: flex; flex-direction: column; transition: border-color .25s, box-shadow .3s; }
+.mw-recipe:hover { border-color: var(--line-strong); box-shadow: 0 12px 32px #0000000c; }
+.mw-recipe-top { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 18px; color: var(--green); }
+.mw-recipe-top > strong { font-size: 22px; overflow-wrap: anywhere; min-width: 0; }
+.mw-recipe-icon { display: grid; place-items: center; width: 42px; height: 42px; flex-shrink: 0; border: 1px solid var(--line); border-radius: 13px; background: var(--ghost); }
+.mold-workflow .mw-recipe h3 { font-size: 19px; overflow-wrap: anywhere; margin-bottom: 8px; }
+.mw-chips { display: flex; flex-wrap: wrap; gap: 6px; padding: 18px 0; }
+.mw-chips span { border-radius: 7px; background: var(--ghost-hover); padding: 6px 8px; font-size: 11px; color: var(--muted); overflow-wrap: anywhere; }
+.mw-recipe-actions { display: flex; gap: 8px; margin-top: auto; padding-top: 8px; }
+.mw-recipe-actions button:first-child { flex: 1; }
+.mold-workflow .mw-search { position: relative; display: block; margin-bottom: 22px; }
+.mw-search > svg { position: absolute; top: 16px; left: 16px; color: var(--muted); }
+.mold-workflow .mw-search input { padding-left: 45px; }
+.mw-drafts { padding: 18px; background: var(--ghost); border: 1px dashed var(--line-strong); border-radius: 14px; margin-bottom: 22px; }
+.mw-draft { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding-top: 12px; }
+.mw-draft > div { min-width: 0; }
+.mw-draft strong { font-size: 14px; display: block; overflow-wrap: anywhere; }
+.mw-draft span { display: block; }
+.mw-empty { padding: 38px 18px; text-align: center; border: 1px dashed var(--line); border-radius: 15px; }
+.mold-workflow .mw-empty > svg { width: 32px; height: 32px; color: var(--green); margin-bottom: 18px; }
+.mw-empty p + button { margin-top: 15px; }
+.mw-editor { max-width: 880px; margin: 0 auto; padding: clamp(18px,3vw,32px); border: 1px solid var(--line); border-radius: 22px; background: radial-gradient(ellipse at 10% 35%,var(--ghost-hover),transparent 60%),var(--panel); }
+.mold-workflow fieldset { margin: 0; padding: 0; border: 0; min-width: 0; }
+.mw-progress { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 8px; margin: 0 0 25px; padding-bottom: 22px; border-bottom: 1px solid var(--line); }
+.mold-workflow .mw-progress button { justify-content: flex-start; padding: 0; border: 0; border-radius: 8px; background: transparent; color: var(--muted); font-size: 12px; text-align: left; }
+.mw-progress b { width: 30px; height: 30px; border: 1px solid var(--line); border-radius: 9px; flex-shrink: 0; display: grid; place-items: center; transition: background .3s,color .3s,border-color .3s; }
+.mold-workflow .mw-progress [aria-current='step'] { color: var(--white); }
+.mw-progress [aria-current='step'] b { background: var(--green); color: var(--black); border-color: var(--green); box-shadow: 0 0 22px var(--ghost-hover); }
+.mw-progress [data-complete='true'] b { border-color: var(--line-strong); color: var(--green); background: var(--ghost-hover); }
+.mold-workflow label { display: grid; gap: 8px; font-size: 13px; font-weight: 600; color: var(--muted); min-width: 0; }
+.mold-workflow input, .mold-workflow textarea, .mold-workflow .select-ui-button { font-family: inherit; width: 100%; min-width: 0; min-height: 50px; padding: 13px 15px; background: var(--field); border: 1px solid var(--line); border-radius: 12px; font-size: 16px; font-weight: 500; color: var(--white); transition: border-color .2s, box-shadow .25s; }
+.mold-workflow input:focus, .mold-workflow textarea:focus { outline: none; border-color: var(--green); box-shadow: 0 0 0 4px var(--ghost-hover); }
+.mold-workflow input::placeholder, .mold-workflow textarea::placeholder { color: var(--muted); opacity: .7; }
+.mold-workflow textarea { resize: vertical; }
+.mold-workflow .select-ui { min-width: 0; width: 100%; }
+.mold-workflow .select-ui-button { justify-content: space-between; }
+.mw-modes { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 12px; margin: 22px 0 18px; }
+.mold-workflow .mw-modes button { display: grid; grid-template-columns: 20px minmax(0,1fr); text-align: left; justify-content: start; gap: 3px 10px; padding: 16px; border-color: var(--line); }
+.mw-modes svg { grid-row: 1/3; color: var(--muted); }
+.mw-modes span { grid-column: 2; font-size: 11px; font-weight: 400; color: var(--muted); }
+.mold-workflow .mw-modes [aria-pressed='true'] { border-color: var(--line-strong); background: var(--ghost-hover); }
+.mw-modes [aria-pressed='true'] svg { color: var(--green); }
+.mw-measure, .mw-manual { padding: 22px; border: 1px solid var(--line); border-radius: 18px; background: linear-gradient(125deg,var(--ghost-hover),transparent 90%); }
+.mw-measure-head { display: flex; align-items: center; justify-content: space-between; gap: 18px; margin-bottom: 20px; }
+.mw-measure-head > div { min-width: 0; }
+.mw-measure-head h3 { margin: 0; }
+.mw-badge { max-width: 42%; padding: 12px 15px; border-radius: 12px; border: 1px solid var(--line); background: var(--ghost); color: var(--green); font-size: 22px; font-weight: 700; overflow-wrap: anywhere; }
+.mw-stage { display: grid; grid-template-columns: minmax(0,1.2fr) minmax(0,1fr); align-items: center; padding: 0 14px 0 0; gap: 8px; border: 1px solid var(--line); border-radius: 15px; background: radial-gradient(ellipse at 25% 55%,color-mix(in srgb,var(--green) 12%,transparent),transparent 57%),var(--panel-muted); margin-bottom: 22px; overflow: hidden; }
+.mw-stage [data-mw-cube] { display: block; width: 100%; height: 225px; min-width: 0; }
+.mw-stage stop { stop-color: var(--green); }
+.mw-face { stroke: var(--green); stroke-width: 1.1; stroke-linejoin: round; }
+.mw-hidden-edge { fill: none; stroke: var(--green); stroke-width: .8; stroke-dasharray: 3 5; opacity: .22; }
+.mw-axis { fill: none; stroke: var(--green); stroke-width: 2.5; stroke-linecap: round; }
+.mw-readings { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 7px; }
+.mw-readings > div { min-width: 0; padding: 11px 8px; background: var(--panel); border: 1px solid var(--line); border-radius: 11px; transition: border-color .25s; }
+.mw-readings [data-active='true'] { border-color: var(--green); }
+.mw-readings span { display: block; font-size: 10px; font-weight: 700; text-transform: uppercase; color: var(--muted); margin-bottom: 6px; }
+.mw-readings strong { display: block; font-size: 15px; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.mw-dimensions { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 12px; }
+.mw-unit { position: relative; display: block; min-width: 0; }
+.mold-workflow .mw-unit input { padding-right: 44px; }
+.mw-unit b { position: absolute; right: 14px; top: 50%; transform: translateY(-50%); font-size: 14px; color: var(--green); pointer-events: none; }
+.mold-workflow .mw-measure-note { margin-top: 12px; font-size: 11px; }
+.mw-manual .mw-sub { margin-top: 12px; }
+.mold-workflow .mw-finish-toggle { display: flex; align-items: center; gap: 10px; padding: 18px 0; cursor: pointer; font-size: 12px; }
+.mold-workflow input[type='checkbox'] { width: 18px; height: 18px; min-height: 18px; padding: 0; margin: 0; accent-color: var(--green); }
+.mw-finish { display: grid; grid-template-columns: minmax(0,1fr) auto; align-items: end; gap: 16px; margin-bottom: 18px; }
+.mw-finish output { padding-bottom: 14px; font-size: 15px; color: var(--green); overflow-wrap: anywhere; }
+.mw-total { padding: 17px; display: flex; align-items: center; justify-content: space-between; gap: 14px; background: var(--ghost-hover); border-radius: 13px; margin-top: 18px; font-size: 13px; }
+.mw-total strong { color: var(--green); font-size: 24px; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; min-width: 0; }
+.mw-components { margin: 20px 0 12px; }
+.mw-component { display: grid; grid-template-columns: minmax(0,1.7fr) minmax(0,1fr) auto; align-items: start; gap: 12px; padding: 16px; margin-bottom: 12px; border: 1px solid var(--line); border-radius: 14px; background: var(--panel-muted); }
+.mold-workflow .mw-component .mw-remove { margin-top: 24px; min-height: 50px; padding: 12px; }
+.mw-component .mw-sub { font-size: 10px; }
+.mold-workflow .mw-optional { margin: 13px 0 0; }
+.mw-review-line { display: flex; justify-content: space-between; align-items: baseline; gap: 22px; padding: 16px 0; border-bottom: 1px solid var(--line); font-size: 13px; }
+.mw-review-line span { color: var(--muted); overflow-wrap: anywhere; min-width: 0; }
+.mw-review-line strong { text-align: right; overflow-wrap: anywhere; min-width: 0; }
+[data-mw-panel='2'] > .mw-sub { margin: 14px 0 24px; }
+.mw-footer { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 24px; padding-top: 22px; border-top: 1px solid var(--line); }
+.mw-draft-state { font-size: 10px; color: var(--muted); text-align: center; }
+.mw-error { border: 1px solid color-mix(in srgb,var(--danger) 40%,transparent); background: color-mix(in srgb,var(--danger) 6%,var(--panel)); color: var(--danger); font-size: 13px; line-height: 1.6; padding: 14px; border-radius: 12px; margin-top: 18px; }
+.mold-workflow [aria-invalid='true'] { border-color: var(--danger); }
+.mold-workflow .mw-toast { display: flex; align-items: center; gap: 12px; padding: 14px; max-width: 880px; margin: 0 auto 20px; background: var(--panel-strong); border: 1px solid var(--line-strong); border-radius: 14px; box-shadow: 0 8px 30px #00000012; }
+.mw-toast > div { flex: 1; min-width: 0; }
+.mw-toast strong { display: block; font-size: 13px; overflow-wrap: anywhere; }
+.mw-toast span:not(.mw-toast-symbol) { display: block; font-size: 11px; color: var(--muted); line-height: 1.55; margin-top: 5px; }
+.mw-toast-symbol { display: grid; place-items: center; width: 32px; height: 32px; flex-shrink: 0; color: var(--green); background: var(--ghost-hover); border-radius: 10px; }
+.mold-workflow .mw-toast button { padding: 8px; border: 0; background: transparent; }
+.mw-toast [data-mw-action='undo'] { color: var(--green); }
+@keyframes mw-spin { to { transform: rotate(360deg); } }
+.mold-workflow .lucide-loader-circle { animation: mw-spin 1s linear infinite; }
+@media (max-width:1100px) { .mw-stage { grid-template-columns: 1fr; padding: 0 14px 14px; } .mw-stage [data-mw-cube] { height: 200px; } .mw-readings > div { padding: 10px 12px; } }
+@media (max-width:600px) {
+  .mw-library { padding: 18px 14px; } .mw-heading { flex-wrap: wrap; gap: 14px; } .mw-heading > button { font-size: 12px; }
+  .mw-editor { padding: 20px 14px; } .mw-editor .mw-heading h2 { font-size: 20px; } .mw-library-back { margin-left: auto; }
+  .mw-progress { gap: 5px; } .mold-workflow .mw-progress button { flex-direction: column; align-items: center; justify-content: center; font-size: 10px; gap: 8px; min-width: 0; } .mw-progress b { width: 26px; height: 26px; border-radius: 8px; }
+  .mw-modes { gap: 8px; } .mold-workflow .mw-modes button { grid-template-columns: 1fr; padding: 12px 10px; font-size: 12px; } .mw-modes svg { display: none; } .mw-modes span { grid-column: 1; font-size: 10px; }
+  .mw-measure, .mw-manual { padding: 14px; } .mw-measure-head { gap: 10px; align-items: start; } .mw-measure-head h3 { font-size: 18px; } .mw-badge { font-size: 17px; padding: 10px; }
+  .mw-dimensions { gap: 8px; } .mw-dimensions label { font-size: 11px; } .mold-workflow .mw-dimensions input { padding-left: 10px; padding-right: 30px; } .mw-dimensions .mw-unit b { right: 8px; font-size: 12px; }
+  .mw-readings > div { padding: 9px 7px; } .mw-readings span { font-size: 9px; } .mw-readings strong { font-size: 14px; }
+  .mw-component { grid-template-columns: minmax(0,1fr) auto; padding: 13px; } .mw-component > label:first-child { grid-column: 1/-1; }
+  .mw-footer { flex-wrap: wrap; gap: 10px; } .mw-footer button { font-size: 12px; padding: 11px 13px; } .mw-draft-state { order: 3; width: 100%; }
+  .mw-total { padding: 14px; } .mw-total strong { font-size: 21px; } .mw-review-line { gap: 14px; font-size: 12px; }
+  .mw-toast-symbol { display: none; } .mw-toast { gap: 8px; }
+}
+@media (prefers-reduced-motion:reduce) { .mold-workflow *, .mold-workflow *::before, .mold-workflow *::after { transition: none !important; animation: none !important; } .mold-workflow button:active:not(:disabled) { transform: none; } }

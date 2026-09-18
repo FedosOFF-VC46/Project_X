@@ -49,7 +49,7 @@ function addRows(modelId, rows) {
 }
 class Query {
  constructor(table) { this.table = table; this.filters = []; }
- select() { return this; } order() { return this; } limit() { return this; }
+ select() { return this; } order() { return this; } limit() { return this; } range() { return this; }
  eq(key, value) { this.filters.push([key,value]); return this; }
  then(resolve) { return Promise.resolve({data:(db[this.table]||[]).filter(row=>this.filters.every(([key,value])=>row[key]===value)),error:null}).then(resolve); }
 }
