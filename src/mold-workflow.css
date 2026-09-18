@@ -34,6 +34,9 @@
 .mw-chips span { border-radius: 7px; background: var(--ghost-hover); padding: 6px 8px; font-size: 11px; color: var(--muted); overflow-wrap: anywhere; }
 .mw-recipe-actions { display: flex; gap: 8px; margin-top: auto; padding-top: 8px; }
 .mw-recipe-actions button:first-child { flex: 1; }
+.mold-workflow .mw-icon-button { width: 44px; padding: 10px; flex-shrink: 0; }
+.mold-workflow .mw-delete { color: var(--danger); border-color: color-mix(in srgb,var(--danger) 25%,var(--line)); }
+.mold-workflow .mw-delete:hover:not(:disabled) { border-color: var(--danger); background: color-mix(in srgb,var(--danger) 10%,transparent); }
 .mold-workflow .mw-search { position: relative; display: block; margin-bottom: 22px; }
 .mw-search > svg { position: absolute; top: 16px; left: 16px; color: var(--muted); }
 .mold-workflow .mw-search input { padding-left: 45px; }
@@ -42,6 +45,29 @@
 .mw-draft > div { min-width: 0; }
 .mw-draft strong { font-size: 14px; display: block; overflow-wrap: anywhere; }
 .mw-draft span { display: block; }
+.mw-draft-actions { display: flex; gap: 8px; flex-shrink: 0; }
+.mold-workflow .mw-delete-dialog { width: min(460px,calc(100% - 32px)); max-height: calc(100dvh - 32px); margin: auto; padding: 0; border: 1px solid var(--line-strong); border-radius: 22px; background: var(--panel-strong); color: var(--white); box-shadow: 0 24px 100px #00000050; overflow: auto; }
+.mw-delete-dialog::backdrop { background: #00000085; backdrop-filter: blur(8px); }
+.mw-delete-content { padding: clamp(22px,4vw,32px); background: radial-gradient(ellipse at 5% 0%,color-mix(in srgb,var(--danger) 6%,transparent),transparent 60%); }
+.mw-delete-symbol { display: grid; place-items: center; width: 46px; height: 46px; margin-bottom: 22px; border: 1px solid color-mix(in srgb,var(--danger) 30%,transparent); border-radius: 14px; background: color-mix(in srgb,var(--danger) 8%,transparent); color: var(--danger); }
+.mw-delete-name { display: block; margin: 20px 0 12px; font-size: 16px; overflow-wrap: anywhere; }
+.mw-delete-actions { display: flex; gap: 12px; margin-top: 26px; }
+.mw-delete-actions > button { flex: 1; min-width: 0; }
+.mold-workflow .mw-danger, .mold-workflow .mw-danger:hover:not(:disabled) { background: var(--danger); border-color: var(--danger); color: #07110d; }
+.mold-workflow .mw-danger:focus-visible { outline-color: var(--danger); }
+:root[data-theme='light'] .mold-workflow .mw-danger { color: #fff; }
+.mold-workflow .mw-leave-dialog { width: min(540px,calc(100% - 32px)); }
+.mw-leave-dialog .mw-delete-content { background: radial-gradient(ellipse at 5% 0%,var(--ghost-hover),transparent 60%); }
+.mw-leave-symbol { display: grid; place-items: center; width: 46px; height: 46px; margin-bottom: 22px; border: 1px solid var(--line-strong); border-radius: 14px; background: var(--ghost-hover); color: var(--green); }
+.mw-changes { display: grid; gap: 0; margin: 18px 0; max-height: 32dvh; overflow-y: auto; overscroll-behavior: contain; padding: 0 10px 0 0; }
+.mw-changes > div { border-bottom: 1px solid var(--line); padding: 12px 0; min-width: 0; }
+.mw-changes dt { font-size: 12px; color: var(--muted); margin-bottom: 6px; }
+.mw-changes dd { display: grid; grid-template-columns: minmax(0,1fr) 18px minmax(0,1fr); gap: 12px; align-items: center; margin: 0; font-size: 13px; line-height: 1.5; overflow-wrap: anywhere; white-space: pre-wrap; }
+.mw-changes dd > span { color: var(--muted); }
+.mw-changes dd > svg { color: var(--muted); }
+.mw-changes dd > strong { color: var(--green); font-weight: 500; }
+.mw-leave-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; padding-top: 8px; }
+.mw-leave-actions [data-mw-action='cancel-leave'] { grid-column: 1/-1; }
 .mw-empty { padding: 38px 18px; text-align: center; border: 1px dashed var(--line); border-radius: 15px; }
 .mold-workflow .mw-empty > svg { width: 32px; height: 32px; color: var(--green); margin-bottom: 18px; }
 .mw-empty p + button { margin-top: 15px; }
@@ -119,6 +145,9 @@
 @media (max-width:1100px) { .mw-stage { grid-template-columns: 1fr; padding: 0 14px 14px; } .mw-stage [data-mw-cube] { height: 200px; } .mw-readings > div { padding: 10px 12px; } }
 @media (max-width:600px) {
   .mw-library { padding: 18px 14px; } .mw-heading { flex-wrap: wrap; gap: 14px; } .mw-heading > button { font-size: 12px; }
+  .mw-draft { flex-wrap: wrap; } .mw-draft-actions { width: 100%; } .mw-draft-actions button:first-child { flex: 1; }
+  .mw-recipe-actions { flex-wrap: wrap; } .mw-recipe-actions button:first-child { flex-basis: 100%; }
+  .mw-leave-actions { grid-template-columns: 1fr; }
   .mw-editor { padding: 20px 14px; } .mw-editor .mw-heading h2 { font-size: 20px; } .mw-library-back { margin-left: auto; }
   .mw-progress { gap: 5px; } .mold-workflow .mw-progress button { flex-direction: column; align-items: center; justify-content: center; font-size: 10px; gap: 8px; min-width: 0; } .mw-progress b { width: 26px; height: 26px; border-radius: 8px; }
   .mw-modes { gap: 8px; } .mold-workflow .mw-modes button { grid-template-columns: 1fr; padding: 12px 10px; font-size: 12px; } .mw-modes svg { display: none; } .mw-modes span { grid-column: 1; font-size: 10px; }

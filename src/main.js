@@ -4,7 +4,7 @@ import { initResinScene } from './scene.js';
 import { createEquipmentSystem } from './equipment.js?v=instance-control-1';
 import { filterInventory } from './equipment-math.js?v=instance-control-1';
 import { createSelectPopup } from './select-popup.js?v=popup-1';
-import { createMoldWorkflow } from './mold-workflow.js?v=mold-flow-1';
+import { createMoldWorkflow } from './mold-workflow.js?v=mold-delete-1';
 
 const app = document.querySelector('#app');
 const toastZone = document.querySelector('#toast-zone');
@@ -170,6 +170,16 @@ const moldWorkflow = createMoldWorkflow({
   save: async (payload) => {
     const { error } = await supabase.rpc('save_mold_recipe', payload);
     if (error) throw error;
+  },
+  remove: async (id) => {
+    const owner = requireUserId();
+    const { data, error } = await supabase.from('mold_calculations').delete()
+      .eq('id', id).eq('user_id', owner).select('id');
+    if (error) throw error;
+    if (!data?.some((row) => row.id === id)) throw new Error('Расчёт уже удалён или недоступен. Обновите страницу.');
+    if (state.user?.id !== owner) return;
+    state.moldCalculations = state.moldCalculations.filter((row) => row.id !== id);
+    state.moldCalculationItems = state.moldCalculationItems.filter((row) => row.calculation_id !== id);
   },
   refresh: loadWorkspace, enhanceSelects, closeSelects: closeCustomSelects, notify: showToast,
 });
@@ -2990,8 +3000,9 @@ document.addEventListener('click', async (event) => {
 
   const viewButton = event.target.closest('[data-view]');
   if (viewButton) {
-    state.view = viewButton.dataset.view;
-    render();
+    const navigate = () => { state.view = viewButton.dataset.view; render(); };
+    if (state.view === 'mold' && viewButton.dataset.view !== 'mold') moldWorkflow.leave(navigate);
+    else navigate();
     return;
   }
 
@@ -3008,12 +3019,16 @@ document.addEventListener('click', async (event) => {
     render(); return;
   }
   if (action === 'logout') {
-    await supabase.auth.signOut();
-    showToast('Вы вышли из приложения');
+    moldWorkflow.leave(async () => {
+      await supabase.auth.signOut();
+      showToast('Вы вышли из приложения');
+    });
   }
   if (action === 'reload') {
-    await loadWorkspace();
-    showToast('Данные обновлены');
+    moldWorkflow.leave(async () => {
+      await loadWorkspace();
+      showToast('Данные обновлены');
+    });
   }
   if (action === 'toggle-theme') {
     state.theme = state.theme === 'dark' ? 'light' : 'dark';

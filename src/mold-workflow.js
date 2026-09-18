@@ -1,5 +1,6 @@
 import { MOLD_UNITS, number, newRecipe, newRow, volumes, recipeFromRecord, importLegacyDraft, validateRecipe, recipeCost, recipePayload } from './mold-math.js?v=mold-flow-1';
 import { createMoldMotion } from './mold-motion.js?v=mold-flow-1';
+import { recipeSnapshot, recipeChanges } from './mold-changes.js?v=mold-delete-1';
 
 const esc = (value) => String(value ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const fmt = (value) => Number.isFinite(value) ? new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 3 }).format(value) : 'Проверьте размеры';
@@ -8,15 +9,24 @@ const unit = (value) => MOLD_UNITS[value] || value || 'ед.';
 const icon = (name) => `<i data-lucide="${name}" aria-hidden="true"></i>`;
 const button = (action, label, cls = '', extra = '') => `<button type="button" class="${cls}" data-mw-action="${action}" ${extra}>${label}</button>`;
 
-export function createMoldWorkflow({ getState, getMaterials, getItems, save, refresh, enhanceSelects, closeSelects, notify }) {
+export function createMoldWorkflow({ getState, getMaterials, getItems, save, remove, refresh, enhanceSelects, closeSelects, notify }) {
   let account = null, store = { drafts: {}, activeId: null, screen: 'library' }, root = null, motion = null, events = null;
-  let busy = false, timer = 0, undo = null, message = null, storageFailed = false, query = '';
+  let busy = false, timer = 0, undo = null, message = null, storageFailed = false, query = '', pendingRemoval = null, pendingLeave = null;
   const key = () => `formula-mold-workflow-v1:${account}`;
   const draft = () => store.drafts[store.activeId];
   const materials = () => getMaterials().filter((m) => m.is_active !== false);
+  function changes(d) {
+    if (!d) return [];
+    if (!d.original) {
+      const record = d.editing && records().find((r) => r.id === d.id);
+      d.original = recipeSnapshot(record ? recipeFromRecord(record, getItems(record)) : newRecipe());
+    }
+    return recipeChanges(d.original, d, getMaterials());
+  }
   function write() {
-    try { localStorage.setItem(key(), JSON.stringify(store)); storageFailed = false; }
-    catch { if (!storageFailed) notify('Не удалось сохранить черновик в браузере. Не закрывайте страницу до сохранения расчёта.', 'error'); storageFailed = true; }
+    const drafts = Object.fromEntries(Object.entries(store.drafts).filter(([, d]) => changes(d).length));
+    try { localStorage.setItem(key(), JSON.stringify({ ...store, drafts })); storageFailed = false; return true; }
+    catch { if (!storageFailed) notify('Не удалось сохранить черновик в браузере. Не закрывайте страницу до сохранения расчёта.', 'error'); storageFailed = true; return false; }
   }
   function ensureAccount() {
     const id = getState().user?.id;
@@ -35,7 +45,9 @@ export function createMoldWorkflow({ getState, getMaterials, getItems, save, ref
       }
       store.legacyImported = true; write();
     }
-    if (!draft()) store.screen = 'library';
+    for (const [id, d] of Object.entries(store.drafts)) if (!changes(d).length) delete store.drafts[id];
+    if (!draft()) { store.activeId = null; store.screen = 'library'; }
+    write();
   }
   function toast(title, detail = '', restore = null) {
     message = { title, detail }; undo = restore;
@@ -59,19 +71,122 @@ export function createMoldWorkflow({ getState, getMaterials, getItems, save, ref
   }
   function icons() { window.lucide?.createIcons({ attrs: { 'stroke-width': 1.8 } }); }
   function records() { return getState().moldCalculations; }
+  const matchesQuery = (record) => (record.title || '').toLocaleLowerCase('ru').includes(query.trim().toLocaleLowerCase('ru'));
   function field(name, label, suffix, placeholder) {
     return `<label>${label}<span class="mw-unit"><input data-mw-field="${name}" aria-label="${label}${suffix ? ', ' + suffix : ''}" inputmode="decimal" autocomplete="off" value="${esc(draft()[name])}" placeholder="${placeholder}"/><b aria-hidden="true">${suffix}</b></span></label>`;
   }
   function library() {
-    const drafts = Object.values(store.drafts);
+    const drafts = Object.values(store.drafts).filter((d) => changes(d).length);
     return `<div class="mw-library" data-mw-library><div class="mw-heading"><div><p class="mw-kicker">Библиотека</p><h2>Ваши расчёты</h2><p class="mw-sub">Сохраните состав заливки и используйте его в картах изделий.</p></div>${button('new', icon('plus') + 'Новый расчёт', 'mw-primary')}</div>
-      ${drafts.length ? `<div class="mw-drafts"><p class="mw-kicker">Можно продолжить</p>${drafts.map((d) => `<div class="mw-draft"><div><strong>${esc(d.title || 'Новый расчёт')}</strong><span class="mw-sub">Черновик · шаг ${Number(d.step || 0) + 1} из 3</span></div>${button('resume', 'Продолжить', '', `data-id="${esc(d.id)}"`)}</div>`).join('')}</div>` : ''}
+      ${drafts.length ? `<div class="mw-drafts"><p class="mw-kicker">Можно продолжить</p>${drafts.map((d) => `<div class="mw-draft"><div><strong>${esc(d.title || 'Новый расчёт')}</strong><span class="mw-sub">Черновик · шаг ${Number(d.step || 0) + 1} из 3</span></div><div class="mw-draft-actions">${button('resume', 'Продолжить', '', `data-id="${esc(d.id)}"`)}${button('delete-draft', icon('trash-2'), 'mw-delete mw-icon-button', `data-id="${esc(d.id)}" aria-label="Удалить черновик ${esc(d.title || 'Новый расчёт')}" title="Удалить черновик"`)}</div></div>`).join('')}</div>` : ''}
       ${records().length ? `<label class="mw-search">${icon('search')}<input data-mw-search value="${esc(query)}" placeholder="Найти расчёт по названию" aria-label="Найти расчёт по названию"/></label>` : ''}
       <div class="mw-library-grid">${records().map((r) => {
         const recipe = recipeFromRecord(r, getItems(r));
         const cost = recipe.rows.length ? getItems(r).reduce((sum, item) => sum + number(item.total_cost ?? number(item.quantity) * number(item.unit_price_snapshot)), 0) : number(r.material_cost_total);
-        return `<article class="mw-recipe" data-mw-record data-title="${esc((r.title || '').toLocaleLowerCase('ru'))}" ${query && !(r.title || '').toLocaleLowerCase('ru').includes(query.toLocaleLowerCase('ru')) ? 'hidden' : ''}><div class="mw-recipe-top"><span class="mw-recipe-icon">${icon('beaker')}</span><strong>${fmt(volumes(recipe).total)} мл</strong></div><h3>${esc(r.title || 'Без названия')}</h3><p class="mw-sub">${recipe.rows.length} ${plural(recipe.rows.length)} · ${money(cost)}</p><div class="mw-chips">${getItems(r).slice(0, 3).map((item) => `<span>${esc(item.material_name_snapshot || getState().materials.find((m) => m.id === item.material_id)?.name || 'Материал')} · ${fmt(number(item.quantity))} ${esc(unit(item.unit_snapshot || getState().materials.find((m) => m.id === item.material_id)?.unit))}</span>`).join('')}${recipe.rows.length > 3 ? `<span>Ещё ${recipe.rows.length - 3}</span>` : ''}</div><div class="mw-recipe-actions">${button('edit', 'Открыть расчёт', '', `data-id="${esc(r.id)}"`)}${button('duplicate', icon('copy'), '', `data-id="${esc(r.id)}" aria-label="Дублировать ${esc(r.title)}" title="Дублировать расчёт"`)}</div></article>`;
-      }).join('')}</div><div class="mw-empty" data-mw-empty ${records().length ? 'hidden' : ''}>${icon('beaker')}<h3>${records().length ? 'Ничего не найдено' : 'Первый расчёт начинается здесь'}</h3><p class="mw-sub">${records().length ? 'Попробуйте другое название.' : 'Задайте объём, добавьте материалы и сохраните рецепт заливки.'}</p></div></div>`;
+        return `<article class="mw-recipe" data-mw-record data-id="${esc(r.id)}" data-title="${esc((r.title || '').toLocaleLowerCase('ru'))}" ${matchesQuery(r) ? '' : 'hidden'}><div class="mw-recipe-top"><span class="mw-recipe-icon">${icon('beaker')}</span><strong>${fmt(volumes(recipe).total)} мл</strong></div><h3>${esc(r.title || 'Без названия')}</h3><p class="mw-sub">${recipe.rows.length} ${plural(recipe.rows.length)} · ${money(cost)}</p><div class="mw-chips">${getItems(r).slice(0, 3).map((item) => `<span>${esc(item.material_name_snapshot || getState().materials.find((m) => m.id === item.material_id)?.name || 'Материал')} · ${fmt(number(item.quantity))} ${esc(unit(item.unit_snapshot || getState().materials.find((m) => m.id === item.material_id)?.unit))}</span>`).join('')}${recipe.rows.length > 3 ? `<span>Ещё ${recipe.rows.length - 3}</span>` : ''}</div><div class="mw-recipe-actions">${button('edit', 'Открыть расчёт', '', `data-id="${esc(r.id)}"`)}${button('duplicate', icon('copy'), 'mw-icon-button', `data-id="${esc(r.id)}" aria-label="Дублировать ${esc(r.title)}" title="Дублировать расчёт"`)}${button('delete-recipe', icon('trash-2'), 'mw-delete mw-icon-button', `data-id="${esc(r.id)}" aria-label="Удалить расчёт ${esc(r.title)}" title="Удалить расчёт"`)}</div></article>`;
+      }).join('')}</div><div class="mw-empty" data-mw-empty ${records().some(matchesQuery) ? 'hidden' : ''}>${icon('beaker')}<h3>${records().length ? 'Ничего не найдено' : 'Первый расчёт начинается здесь'}</h3><p class="mw-sub">${records().length ? 'Попробуйте другое название.' : 'Задайте объём, добавьте материалы и сохраните рецепт заливки.'}</p></div></div>`;
+  }
+  function askRemoval(source, isDraft) {
+    const id = source.dataset.id;
+    const record = isDraft ? store.drafts[id] : records().find((r) => r.id === id);
+    if (!record || pendingRemoval) return;
+    closeSelects(); dismissToast();
+    const dialog = document.createElement('dialog');
+    dialog.className = 'mw-delete-dialog';
+    dialog.setAttribute('aria-labelledby', 'mw-delete-title');
+    dialog.setAttribute('aria-describedby', 'mw-delete-description');
+    const detail = isDraft
+      ? record.editing ? 'Несохранённые изменения будут удалены. Сам сохранённый расчёт останется в библиотеке.' : 'Введённые данные будут удалены только из черновиков. Сохранённые расчёты не изменятся.'
+      : `Расчёт и его состав будут удалены из библиотеки.${store.drafts[id] ? ' Черновик этого расчёта тоже будет удалён.' : ''} Уже созданные изделия и остатки на складе не изменятся.`;
+    dialog.innerHTML = `<div class="mw-delete-content"><span class="mw-delete-symbol">${icon('trash-2')}</span><p class="mw-kicker">${isDraft ? 'Черновик' : 'Библиотека расчётов'}</p><h2 id="mw-delete-title">${isDraft ? 'Удалить черновик?' : 'Удалить расчёт?'}</h2><strong class="mw-delete-name">${esc(record.title || 'Новый расчёт')}</strong><p class="mw-sub" id="mw-delete-description">${detail} Отменить удаление нельзя.</p><div class="mw-error" data-mw-delete-error role="alert" hidden></div><div class="mw-delete-actions">${button('cancel-delete', 'Оставить', '', 'autofocus')}${button('confirm-delete', icon('trash-2') + 'Удалить', 'mw-danger')}</div></div>`;
+    pendingRemoval = { id, isDraft, dialog, source };
+    dialog.addEventListener('cancel', (event) => { event.preventDefault(); if (!busy) cancelRemoval(); }, { signal: events.signal });
+    dialog.addEventListener('keydown', (event) => event.stopPropagation(), { signal: events.signal });
+    root.append(dialog); icons(); dialog.showModal();
+    motion.reveal(dialog.querySelector('.mw-delete-content'));
+  }
+  function cancelRemoval() {
+    const target = pendingRemoval;
+    if (!target) return;
+    pendingRemoval = null; target.dialog.close(); target.dialog.remove();
+    if (target.source.isConnected) target.source.focus({ preventScroll: true });
+  }
+  async function confirmRemoval() {
+    if (!pendingRemoval || busy) return;
+    const target = pendingRemoval, owner = account;
+    const { id, isDraft, dialog } = target;
+    const errorNode = dialog.querySelector('[data-mw-delete-error]');
+    busy = true; errorNode.hidden = true; dialog.setAttribute('aria-busy', 'true');
+    dialog.querySelectorAll('button').forEach((b) => b.disabled = true);
+    dialog.querySelector('[data-mw-action="confirm-delete"]').innerHTML = `${icon('loader-circle')} Удаляем…`; icons();
+    try {
+      if (!isDraft) await remove(id);
+      if (getState().user?.id !== owner || account !== owner) return;
+      // Removing an edit draft must never delete its saved recipe, and vice versa
+      // a deleted recipe must not remain resumable as an old edit draft.
+      const previous = { ...store, drafts: { ...store.drafts } };
+      delete store.drafts[id];
+      if (store.activeId === id) { store.activeId = null; store.screen = 'library'; }
+      if (!write() && isDraft) {
+        store = previous;
+        throw new Error('Браузер не смог удалить черновик. Попробуйте ещё раз.');
+      }
+      cancelRemoval();
+      if (root?.isConnected) rebuild();
+      toast(isDraft ? 'Черновик удалён' : 'Расчёт удалён', isDraft ? 'Сохранённые расчёты не изменились.' : 'Изделия и остатки на складе сохранены.');
+    } catch (failure) {
+      if (account !== owner || getState().user?.id !== owner) return;
+      const text = failure.message || 'Не удалось удалить. Проверьте соединение и попробуйте ещё раз.';
+      if (dialog.isConnected) { errorNode.textContent = text; errorNode.hidden = false; motion.reveal(errorNode); }
+      else notify(text, 'error');
+    } finally {
+      if (account === owner) busy = false;
+      if (dialog.isConnected) {
+        dialog.removeAttribute('aria-busy');
+        dialog.querySelectorAll('button').forEach((b) => b.disabled = false);
+        dialog.querySelector('[data-mw-action="confirm-delete"]').innerHTML = `${icon('trash-2')} Удалить`; icons();
+        dialog.querySelector('[data-mw-action="cancel-delete"]').focus({ preventScroll: true });
+      }
+    }
+  }
+  function cancelLeave() {
+    const target = pendingLeave;
+    if (!target) return;
+    pendingLeave = null; target.dialog.close(); target.dialog.remove();
+    if (target.source?.isConnected) target.source.focus({ preventScroll: true });
+  }
+  function leave(proceed) {
+    if (busy || pendingLeave) return;
+    const d = draft();
+    if (!root?.isConnected || store.screen !== 'editor' || !d) { proceed(); return; }
+    const list = changes(d);
+    if (!list.length) {
+      delete store.drafts[d.id]; store.activeId = null; store.screen = 'library'; write();
+      proceed(); return;
+    }
+    closeSelects(); dismissToast();
+    const dialog = document.createElement('dialog');
+    dialog.className = 'mw-delete-dialog mw-leave-dialog';
+    dialog.setAttribute('aria-labelledby', 'mw-leave-title');
+    dialog.setAttribute('aria-describedby', 'mw-leave-description');
+    dialog.innerHTML = `<div class="mw-delete-content"><span class="mw-leave-symbol">${icon('file-pen-line')}</span><p class="mw-kicker">Есть изменения</p><h2 id="mw-leave-title">Сохранить перед выходом?</h2><strong class="mw-delete-name">${esc(d.title || 'Новый расчёт')}</strong><p class="mw-sub" id="mw-leave-description">${d.editing ? 'Сохранённый расчёт пока не изменился. Вот ваши правки:' : 'Этот расчёт ещё не сохранён. Вот что вы добавили:'}</p><dl class="mw-changes">${list.map((item) => `<div><dt>${esc(item.label)}</dt><dd><span>${esc(item.before)}</span>${icon('arrow-right')}<strong>${esc(item.after)}</strong></dd></div>`).join('')}</dl><div class="mw-error" data-mw-leave-error role="alert" hidden></div><div class="mw-leave-actions">${button('save-leave', icon('check') + 'Сохранить и выйти', 'mw-primary')}${button('discard-leave', 'Не сохранять', 'mw-delete')}${button('cancel-leave', 'Продолжить редактирование', '', 'autofocus')}</div></div>`;
+    pendingLeave = { dialog, proceed, source: document.activeElement, id: d.id };
+    dialog.addEventListener('cancel', (event) => { event.preventDefault(); if (!busy) cancelLeave(); }, { signal: events.signal });
+    dialog.addEventListener('keydown', (event) => event.stopPropagation(), { signal: events.signal });
+    root.append(dialog); icons(); dialog.showModal(); motion.reveal(dialog.querySelector('.mw-delete-content'));
+  }
+  function discardAndLeave() {
+    if (!pendingLeave || busy) return;
+    const { id, proceed, dialog } = pendingLeave;
+    const previous = { ...store, drafts: { ...store.drafts } };
+    delete store.drafts[id]; store.activeId = null; store.screen = 'library';
+    if (!write()) {
+      store = previous;
+      const node = dialog.querySelector('[data-mw-leave-error]');
+      node.textContent = 'Не удалось удалить черновик из браузера. Попробуйте ещё раз.'; node.hidden = false;
+      return;
+    }
+    cancelLeave(); proceed(); toast('Изменения не сохранены', 'Сохранённые расчёты не изменились.');
   }
   function cube() {
     return `<div class="mw-stage"><svg data-mw-cube role="img" aria-label="Объёмная схема прямоугольной заливки"><defs>${['top', 'front', 'side'].map((face, i) => `<linearGradient id="mw-glass-${face}" x1="0" y1="0" x2="${i === 1 ? 0 : 1}" y2="1"><stop offset="0" stop-opacity="${.32 - i * .06}"/><stop offset="1" stop-opacity=".035"/></linearGradient>`).join('')}</defs><path data-hidden-edge class="mw-hidden-edge"/>${['front', 'side', 'top'].map((face) => `<path class="mw-face" data-face="${face}" fill="url(#mw-glass-${face})"/>`).join('')}<path data-axis class="mw-axis"/></svg><div class="mw-readings">${[['length', 'Длина'], ['width', 'Ширина'], ['height', 'Высота']].map(([name, label]) => `<div data-mw-reading="${name}"><span>${label}</span><strong data-mw-value="${name}">0 см</strong></div>`).join('')}</div></div>`;
@@ -95,10 +210,12 @@ export function createMoldWorkflow({ getState, getMaterials, getItems, save, ref
   }
   function plural(count) { const n = count % 100; return n > 10 && n < 20 ? 'материалов' : count % 10 === 1 ? 'материал' : count % 10 >= 2 && count % 10 <= 4 ? 'материала' : 'материалов'; }
   function render() {
+    if (getState().loading) return '<div class="mw-library" role="status">Загружаем расчёты…</div>';
     ensureAccount();
     return `<section class="mold-workflow" aria-label="Расчёты заливок"><div class="mw-toast" data-mw-toast hidden></div><div data-mw-body>${store.screen === 'editor' && draft() ? editor() : library()}</div></section>`;
   }
   function rebuild(focus = true) {
+    if (!root?.isConnected) return;
     closeSelects();
     motion?.destroy();
     root.querySelector('[data-mw-body]').innerHTML = store.screen === 'editor' && draft() ? editor() : library();
@@ -126,7 +243,7 @@ export function createMoldWorkflow({ getState, getMaterials, getItems, save, ref
     for (const [name, value] of Object.entries({ geometry: fmt(v.geometry) + ' мл', volume: fmt(v.total) + ' мл', finish: fmt(v.finish) + ' мл', length: fmt(number(d.length)) + ' см', width: fmt(number(d.width)) + ' см', height: fmt(number(d.height)) + ' см', cost: money(recipeCost(d, materials())), reviewCost: money(recipeCost(d, materials())) })) motion.value(root.querySelector(`[data-mw-value="${name}"]`), value);
     root.querySelector('[data-mw-next]').innerHTML = busy ? `${icon('loader-circle')} Сохраняем…` : d.step === 2 ? `${icon('check')} ${d.editing ? 'Сохранить изменения' : 'Сохранить расчёт'}` : `${d.step === 0 ? 'К материалам' : 'Проверить расчёт'} ${icon('arrow-right')}`;
     root.querySelector('[data-mw-action="back"]').textContent = d.step ? 'Назад' : 'К расчётам';
-    root.querySelector('.mw-draft-state').textContent = storageFailed ? 'Черновик только в этой вкладке' : 'Черновик сохранён';
+    root.querySelector('.mw-draft-state').textContent = storageFailed ? 'Черновик только в этой вкладке' : !changes(d).length ? 'Изменений нет' : d.editing ? 'Есть несохранённые изменения' : 'Черновик сохранён';
     root.querySelectorAll('[data-mw-row]').forEach((node) => {
       const row = d.rows.find((r) => r.key === node.dataset.mwRow); if (!row) return;
       const m = materials().find((item) => item.id === row.materialId);
@@ -158,21 +275,44 @@ export function createMoldWorkflow({ getState, getMaterials, getItems, save, ref
     if (!event.target.matches('[data-mw-form]')) return;
     event.preventDefault(); if (busy) return;
     if (draft().step < 2) { goStep(draft().step + 1); return; }
-    const issue = validateRecipe(draft(), materials()); if (issue) { error(issue); return; }
+    await persistRecipe();
+  }
+  async function persistRecipe(afterSave) {
+    if (busy || !draft()) return;
+    const issue = validateRecipe(draft(), materials()); if (issue) { cancelLeave(); error(issue); return; }
     const id = draft().id, owner = account, editing = draft().editing;
+    const dialog = pendingLeave?.dialog;
+    if (dialog) {
+      dialog.querySelectorAll('button').forEach((b) => b.disabled = true);
+      dialog.querySelector('[data-mw-leave-error]').hidden = true;
+      dialog.querySelector('[data-mw-action="save-leave"]').innerHTML = `${icon('loader-circle')} Сохраняем…`;
+      dialog.setAttribute('aria-busy', 'true');
+    }
     busy = true; clearError(); root.querySelector('fieldset').disabled = true; root.querySelector('[data-mw-action="library"]').disabled = true; update();
     try {
       await save(recipePayload(draft()));
       // Navigation/account changes must never clear another user's draft.
-      if (getState().user?.id !== owner) return;
+      if (getState().user?.id !== owner || account !== owner) return;
+      cancelLeave();
       delete store.drafts[id]; store.activeId = null; store.screen = 'library'; write();
       await refresh();
-      if (getState().user?.id === owner) toast(editing ? 'Расчёт обновлён' : 'Расчёт сохранён', 'Он доступен в картах изделий. Материалы со склада не списаны.');
+      if (getState().user?.id === owner) {
+        afterSave?.();
+        toast(editing ? 'Расчёт обновлён' : 'Расчёт сохранён', 'Он доступен в картах изделий. Материалы со склада не списаны.');
+      }
     } catch (failure) {
-      if (getState().user?.id === owner) error({ message: `${failure.message || 'Не удалось сохранить расчёт.'} Введённые данные сохранены в черновике. Попробуйте ещё раз.` });
+      if (getState().user?.id === owner) {
+        const text = `${failure.message || 'Не удалось сохранить расчёт.'} Введённые данные сохранены в черновике. Попробуйте ещё раз.`;
+        if (dialog?.isConnected) { const node = dialog.querySelector('[data-mw-leave-error]'); node.textContent = text; node.hidden = false; motion.reveal(node); }
+        else error({ message: text });
+      }
     } finally {
-      busy = false;
-      if (root?.isConnected && draft()) { root.querySelector('fieldset').disabled = false; root.querySelector('[data-mw-action="library"]').disabled = false; update(); }
+      if (account === owner) busy = false;
+      if (root?.isConnected && draft() && root.querySelector('fieldset')) { root.querySelector('fieldset').disabled = false; root.querySelector('[data-mw-action="library"]').disabled = false; update(); }
+      if (dialog?.isConnected) {
+        dialog.removeAttribute('aria-busy'); dialog.querySelectorAll('button').forEach((b) => b.disabled = false);
+        dialog.querySelector('[data-mw-action="save-leave"]').innerHTML = `${icon('check')} Сохранить и выйти`; icons();
+      }
     }
   }
   function input(event) {
@@ -196,15 +336,21 @@ export function createMoldWorkflow({ getState, getMaterials, getItems, save, ref
     const action = b.dataset.mwAction; motion.press(b);
     if (action === 'dismiss') { dismissToast(); return; }
     if (action === 'undo') { const restore = undo; dismissToast(); restore?.(); return; }
+    if (action === 'delete-recipe' || action === 'delete-draft') { askRemoval(b, action === 'delete-draft'); return; }
+    if (action === 'cancel-delete') { cancelRemoval(); return; }
+    if (action === 'confirm-delete') { void confirmRemoval(); return; }
+    if (action === 'cancel-leave') { cancelLeave(); return; }
+    if (action === 'discard-leave') { discardAndLeave(); return; }
+    if (action === 'save-leave') { void persistRecipe(pendingLeave?.proceed); return; }
     if (['library', 'new', 'edit', 'duplicate', 'resume'].includes(action)) {
       dismissToast(); clearError();
-      if (action === 'library') { store.screen = 'library'; write(); rebuild(); toast('Черновик сохранён', 'Продолжить можно из библиотеки расчётов.'); return; }
+      if (action === 'library') { leave(() => { store.screen = 'library'; write(); rebuild(); }); return; }
       if (action === 'new') { const d = newRecipe(); store.drafts[d.id] = d; store.activeId = d.id; }
       if (action === 'resume') store.activeId = b.dataset.id;
       if (action === 'edit' || action === 'duplicate') {
         const record = records().find((r) => r.id === b.dataset.id); if (!record) return;
         let d = action === 'edit' && store.drafts[record.id] || recipeFromRecord(record, getItems(record));
-        if (action === 'duplicate') d = { ...d, id: crypto.randomUUID(), editing: false, title: `${d.title} · копия`, step: 0 };
+        if (action === 'duplicate') d = { ...d, id: crypto.randomUUID(), editing: false, original: recipeSnapshot(newRecipe()), title: `${d.title} · копия`, step: 0 };
         store.drafts[d.id] = d; store.activeId = d.id;
       }
       store.screen = 'editor'; write(); rebuild();
@@ -234,12 +380,15 @@ export function createMoldWorkflow({ getState, getMaterials, getItems, save, ref
       });
     }
   }
-  function unmount() { events?.abort(); motion?.destroy(); clearTimeout(timer); root = null; }
+  function unmount() { cancelLeave(); cancelRemoval(); events?.abort(); motion?.destroy(); clearTimeout(timer); root = null; }
   function mount() {
     unmount(); root = document.querySelector('.mold-workflow'); if (!root) return;
     ensureAccount(); events = new AbortController(); motion = createMoldMotion(root);
     const on = (name, fn) => root.addEventListener(name, fn, { signal: events.signal });
     on('click', click); on('input', input); on('submit', submit);
+    window.addEventListener('beforeunload', (event) => {
+      if (store.screen === 'editor' && changes(draft()).length) { event.preventDefault(); event.returnValue = ''; }
+    }, { signal: events.signal });
     on('focusin', (event) => { const name = event.target.dataset.mwField; if (draft()) motion.cube([draft().length, draft().width, draft().height], name || ''); root.querySelectorAll('[data-mw-reading]').forEach((n) => n.dataset.active = n.dataset.mwReading === name); if (event.target.closest('[data-mw-toast]')) clearTimeout(timer); });
     on('focusout', () => queueMicrotask(scheduleToast));
     const slot = root.querySelector('[data-mw-toast]');
@@ -248,5 +397,5 @@ export function createMoldWorkflow({ getState, getMaterials, getItems, save, ref
     update(); motion.reveal(root.querySelector('[data-mw-body]'));
     if (message) toast(message.title, message.detail, undo);
   }
-  return { render, mount, unmount };
+  return { render, mount, unmount, leave };
 }

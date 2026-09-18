@@ -1,6 +1,37 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { newRecipe, newRow, volumes, recipeFromRecord, importLegacyDraft, validateRecipe, recipePayload, recipeCost, cuboidPoints } from '../src/mold-math.js';
+import { recipeSnapshot, recipeChanges } from '../src/mold-changes.js';
+
+test('opening, changing steps, equivalent decimals and inactive fields do not dirty a recipe', () => {
+  const d = { ...newRecipe(), title: 'Часы', length: '12', width: '8', height: '1.5', rows: [newRow({ material_id: 'resin', quantity: 140 })] };
+  const original = recipeSnapshot(d);
+  const opened = { ...d, step: 2, height: '1,500', manual: '500', thickness: '1', rows: d.rows.map(row => ({ ...row, key: 'new-key', name: 'Renamed', quantity: '140.00' })) };
+  assert.deepEqual(recipeChanges(original, opened), []);
+  opened.height = '2'; assert.equal(recipeChanges(original, opened)[0].label, 'Высота');
+  opened.height = '1.5'; assert.deepEqual(recipeChanges(original, opened), []);
+});
+test('change summary covers text, finish, volume mode and every added/removed/changed material', () => {
+  const d = { ...newRecipe(), title: 'До', mode: 'manual', manual: '120', rows: [newRow({ material_id: 'resin', quantity: 140 }), newRow({ material_id: 'ink', quantity: 2 })] };
+  const original = recipeSnapshot(d);
+  d.title = 'После'; d.notes = 'Синий'; d.manual = '150'; d.finish = true; d.finishMl = '10';
+  d.rows[0].quantity = '145'; d.rows.splice(1, 1, newRow({ material_id: 'pair', quantity: 1 }));
+  const summary = recipeChanges(original, d, [{ id: 'resin', name: 'Смола', unit: 'g' }, { id: 'ink', name: 'Чернила', unit: 'ml' }, { id: 'pair', name: 'Швензы', unit: 'pair' }]);
+  assert.deepEqual(summary.find(row=>row.label==='Смола'), { label: 'Смола', before: '140 г', after: '145 г' });
+  assert.deepEqual(summary.find(row=>row.label==='Чернила'), { label: 'Чернила', before: '2 мл', after: 'Не добавлен' });
+  assert.ok(summary.some(row=>row.label==='Швензы' && row.after==='1 пар'));
+  for (const label of ['Название', 'Примечание', 'Объём основной заливки', 'Финишный слой', 'Объём финиша']) assert.ok(summary.some(row=>row.label===label));
+  d.mode='sizes'; d.length='12'; d.width='8'; d.height='1.5';
+  assert.ok(recipeChanges(original,d).some(row=>row.label==='Способ расчёта'));
+});
+test('row keys and order are ignored, but incomplete and duplicate material rows are not silently discarded', () => {
+  const d = { ...newRecipe(), rows: [newRow({ material_id: 'resin', quantity: 140 }), newRow({ material_id: 'ink', quantity: 2 })] };
+  const original = recipeSnapshot(d);
+  d.rows.reverse(); assert.deepEqual(recipeChanges(original,d),[]);
+  d.rows.push(newRow()); assert.equal(recipeChanges(original,d)[0].label,'Материал не выбран');
+  d.rows.pop(); d.rows.push(newRow({ material_id: 'ink', quantity: 2 })); assert.equal(recipeChanges(original,d).length,1);
+  d.rows.pop(); d.rows[0].quantity='-1'; assert.equal(recipeChanges(original,d).length,1);
+});
 
 test('volume modes are exclusive; finish uses mm and never consumes inactive fields', () => {
   const draft = { ...newRecipe(), title: 'Часы', length: '12', width: '8', height: '1,5', manual: '500', finish: true, thickness: '0,8', finishMl: '30' };

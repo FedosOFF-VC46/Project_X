@@ -44,12 +44,24 @@ begin
   perform public.save_mold_recipe(recipe,data || '{"mode":"manual","manual":120,"finish":false}', '[]');
   assert (select mold_volume_ml=120 and finish_volume_ml=0 from public.mold_calculations where id=recipe), 'disabled finish is ignored';
   assert (select count(*)=0 from public.mold_calculation_items where calculation_id=recipe), 'volume-only recipe is allowed';
+  perform public.save_mold_recipe(recipe,data,items);
+  perform public.save_mold_recipe('30000000-0000-4000-8000-000000000002',data,items);
 
   perform set_config('request.jwt.claim.sub','20000000-0000-4000-8000-000000000002',true);
   failed := false;
   begin perform public.save_mold_recipe(recipe,data,'[]'); exception when others then failed := true; end;
   assert failed, 'cannot overwrite another user recipe';
   assert (select count(*)=0 from public.mold_calculations), 'cannot read another user recipe';
+  delete from public.mold_calculations where id=recipe;
+  assert not found, 'cannot delete another user recipe';
+  perform set_config('request.jwt.claim.sub','20000000-0000-4000-8000-000000000001',true);
+  assert (select count(*)=3 from public.mold_calculation_items where calculation_id=recipe), 'unauthorized deletion preserves ingredients';
+  delete from public.mold_calculations where id=recipe and user_id=auth.uid();
+  assert found, 'owner can delete own recipe';
+  assert (select count(*)=0 from public.mold_calculation_items where calculation_id=recipe), 'recipe deletion cascades to its ingredients';
+  assert (select count(*)=1 from public.mold_calculations), 'deletion preserves other recipes';
+  assert (select count(*)=3 from public.mold_calculation_items), 'deletion preserves other recipe ingredients';
+  assert (select count(*)=3 and sum(current_stock)=0 from public.materials), 'recipe deletion preserves warehouse materials';
   perform set_config('request.jwt.claim.sub','',true);
   failed := false;
   begin perform public.save_mold_recipe(gen_random_uuid(),data,'[]'); exception when others then failed := true; end;
