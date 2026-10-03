@@ -156,40 +156,75 @@ body.lp-screen-open { overflow: hidden; }
 .lp-screen-dialog > p { padding: 14px 24px; font-size: 11px; line-height: 1.65; color: var(--lp-muted); flex-shrink: 0; border-top: 1px solid var(--lp-line); }
 .lp-pricing { position: relative; color: #102c1c; background: #d4f3de; padding-block: 90px; border-radius: 32px; }
 .lp-pricing::before { position: absolute; inset: 0; content: ""; background-image: linear-gradient(#145b3110 1px, transparent 1px), linear-gradient(90deg, #145b3110 1px, transparent 1px); background-size: 52px 52px; mask-image: linear-gradient(90deg, #0006, transparent); pointer-events: none; }
-.lp-pricing-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12%; align-items: center; position: relative; }
+.lp-pricing-grid { display: grid; grid-template-columns: .95fr 1.05fr; gap: 7%; align-items: start; position: relative; }
+.lp-pricing-grid > * { min-width: 0; }
+.lp-pricing-copy { padding-top: 50px; }
 .lp-pricing-copy .lp-overline { color: #305b3e; }
 .lp-pricing-copy h2 { font-size: clamp(46px, 5.8vw, 79px); line-height: 1.06; margin-top: 24px; }
 .lp-pricing-copy h2 > span { color: #2a7a49; }
-.lp-pricing-copy > p:not(.lp-overline) { font-size: 14px; line-height: 1.9; max-width: 340px; color: #41654c; margin-top: 28px; }
-.lp-pricing-stamp { display: grid; place-content: center; width: 108px; height: 108px; border-radius: 50%; border: 1px solid #568463; transform: rotate(-14deg); font-size: 9px; line-height: 1.8; text-align: center; margin-top: 30px; letter-spacing: .05em; }
+.lp-pricing-copy > p:not(.lp-overline) { font-size: 14px; line-height: 1.9; max-width: 450px; color: #41654c; margin-top: 26px; }
+.lp-cost-factors { display: grid; grid-template-columns: 1fr 1fr; gap: 22px 28px; margin: 32px 0 0; }
+.lp-cost-factors > div { border-top: 1px solid #a7cfb4; padding-top: 14px; min-width: 0; }
+.lp-cost-factors dt { font-size: 13px; font-weight: 550; color: #204a30; }
+.lp-cost-factors dd { margin: 7px 0 0; font-size: 11px; line-height: 1.75; color: #41654c; }
+.lp-pricing-copy > p.lp-cost-context { font-size: 10px; line-height: 1.8; margin-top: 24px; }
 .lp-calculator { color: #183c27; background: #f6fff7; border: 1px solid #fff; border-radius: 20px; padding: 30px; box-shadow: 0 24px 70px #204c261b; }
 .lp-calc-top { display: flex; justify-content: space-between; gap: 16px; align-items: center; }
 .lp-calc-top small { font-size: 10px; color: #4d6d57; }
 .lp-calc-top h3 { margin-top: 6px; font-size: 20px; font-weight: 550; }
-.lp-calc-top > span { color: #317948; background: #e0f2e4; border-radius: 50%; padding: 11px; display: flex; }
-.lp-calc-fixed { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; padding-block: 26px; border-bottom: 1px solid #ccdccc; margin-bottom: 26px; }
-.lp-calc-fixed span { display: grid; gap: 8px; font-size: 10px; color: #536d59; }
-.lp-calc-fixed b { color: #183c27; font-size: 19px; font-weight: 500; }
-.lp-slider-label { display: flex; justify-content: space-between; gap: 16px; align-items: center; font-size: 12px; color: #193d26; font-weight: 450; margin-top: 22px; }
-.lp-slider-label small { display: block; font-size: 9px; color: #5d7362; font-weight: 350; margin-top: 4px; }
-.lp-slider-label output { font-size: 18px; font-weight: 600; }
-.landing .lp-range { display: block; appearance: none; -webkit-appearance: none; width: 100%; padding: 0; height: 6px; min-height: 0; margin: 24px 0; border: 0; border-radius: 10px; background: linear-gradient(90deg, #28774a var(--range-progress), #cfded1 var(--range-progress)); cursor: pointer; color-scheme: light; box-shadow: none; }
+.lp-calc-top > span { color: #317948; background: #e0f2e4; border-radius: 12px; padding: 11px; display: flex; }
+.lp-calc-intro { color: #51705b; font-size: 11px; line-height: 1.8; margin-top: 18px !important; }
+.lp-price-controls { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-top: 26px; }
+.lp-price-controls > div { min-width: 0; }
+.lp-slider-label { display: grid; gap: 10px; font-size: 11px; color: #33563e; font-weight: 450; }
+.lp-slider-label output { font-size: 21px; color: #193d26; font-weight: 550; font-variant-numeric: tabular-nums; }
+.landing .lp-range { display: block; appearance: none; -webkit-appearance: none; width: 100%; padding: 0; height: 6px; min-height: 0; margin: 20px 0; border: 0; border-radius: 10px; background: linear-gradient(90deg, #28774a var(--range-progress), #cfded1 var(--range-progress)); cursor: pointer; color-scheme: light; box-shadow: none; }
 .lp-range::-webkit-slider-thumb { appearance: none; width: 22px; height: 22px; border: 4px solid #f6fff7; box-shadow: 0 0 0 1px #2c7547, 0 2px 8px #16331d22; background: #28774a; border-radius: 50%; transition: scale .2s; }
 .lp-range::-moz-range-thumb { width: 16px; height: 16px; border: 4px solid #f6fff7; box-shadow: 0 0 0 1px #2c7547; background: #28774a; border-radius: 50%; }
 .lp-range:active::-webkit-slider-thumb { scale: 1.2; }
-.lp-pricing :is(button, input):focus-visible { outline-color: #174a2b; }
-.lp-segments { display: flex; gap: 8px; margin-top: -2px; }
-.lp-segments button { background: transparent; border: 1px solid #c9dece; border-radius: 7px; font-size: 10px; padding: 7px 15px; }
-.lp-segments button[aria-pressed="true"] { color: #fff; background: #285f3a; border-color: #285f3a; }
-.lp-segments button:hover { border-color: #285f3a; }
-.lp-calc-breakdown { display: grid; gap: 12px; padding-block: 25px; font-size: 11px; }
-.lp-calc-breakdown > span { display: flex; justify-content: space-between; gap: 12px; }
-.lp-calc-breakdown > span:nth-child(2) { color: #4f7259; font-size: 10px; }
-.lp-calc-breakdown b { font-weight: 500; }
-.lp-calc-result { border-top: 1px solid #c5daca; padding-top: 21px; display: flex; align-items: center; justify-content: space-between; gap: 20px; }
-.lp-calc-result span { font-size: 12px; max-width: 110px; line-height: 1.7; }
-.lp-calc-result strong { font-size: clamp(30px, 3vw, 42px); letter-spacing: -.06em; font-weight: 550; font-variant-numeric: tabular-nums; white-space: nowrap; }
-.lp-calc-note { font-size: 9px; line-height: 1.8; color: #51715a; margin-top: 20px !important; }
+.lp-pricing :is(button, input, summary):focus-visible { outline: 2px solid #174a2b; outline-offset: 5px; }
+.lp-packaging-choice { display: flex; align-items: center; gap: 10px; padding: 13px 15px; border: 1px solid #cbdfcf; border-radius: 10px; background: #ebf7ed; font-size: 11px; cursor: pointer; transition: background .2s, border-color .2s; }
+.lp-packaging-choice:hover { background: #e1f3e5; border-color: #93bd9e; }
+.landing .lp-packaging-choice input { appearance: auto; accent-color: #28774a; color-scheme: light; width: 17px; height: 17px; min-height: 0; margin: 0; flex: 0 0 auto; box-shadow: none; }
+.lp-packaging-choice b { margin-left: auto; font-weight: 500; white-space: nowrap; }
+.lp-price-parts { display: grid; grid-template-columns: 1fr 1fr; gap: 20px 24px; padding-block: 24px; }
+.lp-price-parts > div { display: grid; gap: 8px; min-width: 0; }
+.lp-price-parts span { display: flex; align-items: center; gap: 7px; font-size: 10px; color: #536d59; }
+.lp-price-parts strong { font-size: 18px; font-weight: 500; font-variant-numeric: tabular-nums; }
+.lp-cost-dot { width: 6px; height: 6px; flex: 0 0 auto; border-radius: 2px; }
+.lp-cost-materials { background: #46a578; }
+.lp-cost-labor { background: #a2c3ed; }
+.lp-cost-tools { background: #cea96e; }
+.lp-cost-packaging { background: #ded2b7; }
+.lp-cost-extra { background: #def2d9; }
+.lp-calc-subtotal { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding-top: 18px; border-top: 1px solid #ccdccc; font-size: 12px; }
+.lp-calc-subtotal strong { font-size: 19px; font-weight: 550; font-variant-numeric: tabular-nums; }
+.lp-cost-details { border-block: 1px solid #d7e6da; margin: 18px 0; }
+.lp-cost-details summary { display: flex; align-items: center; gap: 8px; padding-block: 15px; list-style: none; cursor: pointer; font-size: 11px; font-weight: 450; }
+.lp-cost-details summary::-webkit-details-marker { display: none; }
+.lp-cost-details summary > span:first-child { margin-left: auto; color: #607c68; font-size: 10px; white-space: nowrap; }
+.lp-details-chevron { width: 7px; height: 7px; border-right: 1.5px solid currentColor; border-bottom: 1.5px solid currentColor; transform: rotate(45deg); margin: -4px 3px 0 6px; transition: transform .2s; flex: 0 0 auto; }
+.lp-cost-details[open] .lp-details-chevron { transform: rotate(225deg); margin-top: 3px; }
+.lp-cost-details[open] > div { animation: lp-panel-in .25s both; }
+.lp-cost-detail-row { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding-block: 11px; border-top: 1px solid #e1ebe3; font-size: 11px; }
+.lp-cost-detail-row span { display: grid; gap: 5px; min-width: 0; }
+.lp-cost-detail-row b, .lp-cost-detail-row strong { font-weight: 500; }
+.lp-cost-detail-row strong { white-space: nowrap; }
+.lp-cost-detail-row small { color: #597663; line-height: 1.7; font-size: 10px; }
+.lp-cost-details > p { font-size: 10px; color: #53705d; line-height: 1.75; padding-block: 10px 18px; }
+.lp-calc-result { padding: 22px; border-radius: 14px; background: #173e2b; color: #f2fff2; }
+.lp-calc-result > div:first-child { display: grid; gap: 10px; }
+.lp-calc-result span { font-size: 11px; line-height: 1.7; }
+.lp-calc-result strong { font-size: clamp(30px, 3vw, 42px); letter-spacing: -.05em; font-weight: 550; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.lp-price-result-note { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 4px 12px; padding-top: 16px; color: #bbd7c5; }
+.lp-price-result-note span { font-size: 10px; }
+.lp-price-result-note b { font-weight: 400; }
+.lp-cost-bar { display: flex; gap: 0; height: 5px; margin-top: 13px; border-radius: 4px; overflow: hidden; }
+.lp-cost-bar i { display: block; flex-basis: 0; transition: flex-grow .35s ease; }
+.lp-price-footer { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 4px 10px; margin-top: 14px; font-size: 9px; color: #597663; }
+.lp-price-footer button { min-height: 40px; border: 0; border-radius: 8px; background: transparent; color: #205738; padding: 8px 0 8px 8px; font-size: 10px; text-decoration: underline; text-underline-offset: 4px; }
+.lp-price-footer button:hover { color: #102a19; }
+.lp-calc-note { font-size: 9px; line-height: 1.8; color: #51715a; margin-top: 8px !important; }
 .lp-workflow { padding-block: 114px 100px; }
 .lp-flow-line { height: 1px; background: var(--lp-line); margin-top: 65px; position: relative; }
 .lp-flow-line > span { position: absolute; inset-block: 0; width: 16%; background: linear-gradient(90deg, transparent, #65ffc0, transparent); animation: lp-travel 7s linear infinite; }
@@ -304,10 +339,9 @@ form[data-action="auth"][aria-busy] .auth-idle-label { display: none; }
   .lp-showcase { padding-bottom: 70px; }
   .lp-pricing { padding-block: 65px; border-radius: 24px; }
   .lp-pricing-grid { grid-template-columns: 1fr; gap: 36px; }
-  .lp-pricing-copy { position: relative; }
+  .lp-pricing-copy { position: relative; padding-top: 0; }
   .lp-pricing-copy h2 { font-size: 56px; }
   .lp-pricing-copy > p:not(.lp-overline) { max-width: 400px; }
-  .lp-pricing-stamp { position: absolute; right: 0; top: 45px; width: 98px; height: 98px; }
   .lp-calculator { padding: 28px; }
   .lp-workflow { padding-block: 70px 60px; }
   .lp-flow-steps { grid-template-columns: 1fr 1fr; gap: 36px; margin-top: 36px; }
@@ -381,13 +415,23 @@ form[data-action="auth"][aria-busy] .auth-idle-label { display: none; }
   .lp-screen-dialog > p { padding: 12px; font-size: 10px; }
   .lp-pricing-copy h2 { font-size: 48px; }
   .lp-pricing-copy > p:not(.lp-overline) { font-size: 12px; }
-  .lp-pricing-stamp { width: 80px; height: 80px; font-size: 7px; }
   .lp-calculator { padding: 21px; border-radius: 16px; }
   .lp-calc-top h3 { font-size: 17px; }
   .lp-calc-top > span { padding: 8px; }
   .lp-calc-top > span svg { width: 18px; }
   .lp-calc-result strong { font-size: 34px; }
   .lp-calc-result span { font-size: 10px; }
+  .lp-calc-result { padding: 18px; }
+  .lp-calc-result strong { font-size: clamp(25px, 8.2vw, 34px); }
+  .lp-price-controls { grid-template-columns: 1fr; gap: 8px; }
+  .lp-slider-label { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+  .lp-slider-label > span { max-width: 140px; line-height: 1.7; }
+  .lp-slider-label output { white-space: nowrap; font-size: 19px; }
+  .lp-cost-factors { gap: 20px; }
+  .lp-cost-factors dt { font-size: 12px; }
+  .lp-cost-factors dd { font-size: 10px; }
+  .lp-cost-details summary { font-size: 10px; flex-wrap: wrap; }
+  .lp-cost-details summary > span:first-child { font-size: 9px; }
   .lp-flow-steps { gap: 34px 22px; }
   .lp-flow-steps h3 { font-size: 16px; }
   .lp-flow-steps p { font-size: 11px; }

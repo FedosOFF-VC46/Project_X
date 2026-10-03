@@ -1,6 +1,6 @@
 import { PHOTO_BUCKET } from './config.js';
 import { supabase } from './supabaseClient.js';
-import { renderLanding, mountLanding } from './landing.js?v=landing-screens-1';
+import { renderLanding, mountLanding } from './landing.js?v=landing-pricing-2';
 import { createEquipmentSystem } from './equipment.js?v=instance-control-1';
 import { filterInventory } from './equipment-math.js?v=instance-control-1';
 import { createSelectPopup } from './select-popup.js?v=popup-1';

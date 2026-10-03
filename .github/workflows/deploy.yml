@@ -39,6 +39,7 @@ jobs:
           node --check src/mold-math.js
           node --check src/landing.js
           node --check src/landing-screens.js
+          node --check src/landing-pricing.js
           node --check src/landing-scene.js
           node --test tests/*.test.mjs
 

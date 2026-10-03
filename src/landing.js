@@ -1,15 +1,5 @@
 import { renderScreenGallery, renderScreenDialog, mountScreenGalleries } from './landing-screens.js?v=screens-1';
-
-const money = new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 0 });
-const qty = new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 2 });
-const rub = (value) => `${money.format(value)} ₽`;
-
-export function calculateDemoPrice(hours = 1, markup = 120) {
-  const labor = Math.round(Math.max(0, Number(hours) || 0) * 200);
-  const cost = 425 + 25 + labor;
-  const extra = Math.round(cost * Math.max(0, Number(markup) || 0) / 100);
-  return { materials: 425, tools: 25, labor, cost, extra, price: cost + extra };
-}
+import { renderPricingDemo, mountPricingDemo } from './landing-pricing.js?v=pricing-2';
 
 function icon(name) {
   const paths = {
@@ -20,14 +10,14 @@ function icon(name) {
     recipe: '<path d="M8 3v13a4 4 0 0 0 8 0V3M6 3h12M8 10h8"/>',
     box: '<path d="m12 3 9 5-9 5-9-5 9-5ZM3 8v9l9 5 9-5V8M12 13v9M7 5.8l9 5"/>',
     chart: '<path d="M4 4v16h16M8 15l4-5 4 2 4-7"/>',
-    spark: '<path d="m12 3 2.4 6.6L21 12l-6.6 2.4L12 21l-2.4-6.6L3 12l6.6-2.4L12 3Z"/>',
+    product: '<rect x="7" y="3" width="13" height="16" rx="2"/><path d="M4 7v12a3 3 0 0 0 3 3h9M11 7h5M11 11h5M11 15h3"/>',
   };
   return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${paths[name] || paths.arrow}</svg>`;
 }
 
 const demos = [
   { id: 'recipe', name: 'Смола', icon: 'recipe', caption: '01 / От идеи к составу', title: 'Одна удачная формула.\nМного красивых вещей.', text: 'Сохраните объём заливки и состав. Применяйте расчёт к новым изделиям, меняйте цвет и добавляйте детали, не начиная каждый раз с нуля.' },
-  { id: 'product', name: 'Изделия', icon: 'spark', caption: '02 / От состава к цене', title: 'Знайте цену\nсвоей работы.', text: 'Материалы, время и износ инструментов складываются в себестоимость. Вы выбираете наценку, а не угадываете итоговую цену.' },
+  { id: 'product', name: 'Изделия', icon: 'product', caption: '02 / От состава к цене', title: 'Знайте цену\nсвоей работы.', text: 'Материалы, время и износ инструментов складываются в себестоимость. Вы выбираете наценку, а не угадываете итоговую цену.' },
   { id: 'stock', name: 'Склад', icon: 'box', caption: '03 / От изготовления к порядку', title: 'Всё на своём месте.\nДаже мелочи.', text: 'Смола, пигменты, фурнитура, готовые изделия и инструменты. Видно, что осталось, чего не хватает и какой ресурс ещё есть у молда.' },
   { id: 'business', name: 'Бизнес', icon: 'chart', caption: '04 / От мастерской к клиенту', title: 'Отправлено\nне значит продано.', text: 'Продажи отдельно, логистика отдельно. Учитывайте отправки и возвраты, не смешивая движение изделий с полученной выручкой.' },
 ];
@@ -74,23 +64,13 @@ export function renderLanding() {
         </div>`).join('')}</div>
       </section>
 
-      <section class="lp-pricing" id="price-demo" aria-labelledby="lp-price-title"><div class="lp-container lp-pricing-grid">
-        <div class="lp-pricing-copy" data-reveal><p class="lp-overline">Почувствуйте разницу</p><h2 id="lp-price-title">Красиво.<br>А сколько<br><span>стоит?</span></h2><p>Ваше время тоже имеет цену.<br>Подвигайте ползунки: из чего складывается стоимость, видно сразу.</p><span class="lp-pricing-stamp">НЕ МАГИЯ.<br>ВАША ФОРМУЛА.</span></div>
-        <div class="lp-calculator" data-reveal><div class="lp-calc-top"><div><small>Попробуйте на примере</small><h3>Подстаканник «Волна»</h3></div><span>${icon('spark')}</span></div>
-          <div class="lp-calc-fixed"><span>Материалы <b>425 ₽</b></span><span>Износ молда <b>25 ₽</b></span></div>
-          <label class="lp-slider-label" for="lp-hours"><span>Ваше время <small>200 ₽ / час</small></span><output data-hours-value for="lp-hours">1 ч</output></label><input id="lp-hours" class="lp-range" type="range" min="0.25" max="4" value="1" step="0.25" aria-valuetext="1 час"/>
-          <label class="lp-slider-label" for="lp-markup"><span>Ваша наценка</span><output data-markup-value for="lp-markup">120%</output></label><input id="lp-markup" class="lp-range" type="range" min="0" max="250" value="120" step="10" aria-valuetext="120 процентов"/>
-          <div class="lp-segments" aria-label="Варианты наценки"><button type="button" data-markup="20" aria-pressed="false">×1,2</button><button type="button" data-markup="120" aria-pressed="true">×2,2</button><button type="button" data-markup="250" aria-pressed="false">×3,5</button></div>
-          <div class="lp-calc-breakdown"><span>Себестоимость <b data-demo-cost>650 ₽</b></span><span>В том числе работа <b data-demo-labor>200 ₽</b></span><span>Наценка <b data-demo-extra>780 ₽</b></span></div>
-          <div class="lp-calc-result" aria-live="polite" aria-atomic="true"><span>Цена вашего изделия</span><strong data-demo-price>1 430 ₽</strong></div><p class="lp-calc-note">Это пример расчёта, не тариф сервиса. В кабинете используются ваши материалы и данные.</p>
-        </div>
-      </div></section>
+      ${renderPricingDemo(icon('product'))}
 
       <section class="lp-workflow lp-container" id="workflow" aria-labelledby="lp-flow-title">
         <div class="lp-section-head" data-reveal><div><p class="lp-overline">От первой идеи до продажи</p><h2 id="lp-flow-title">Не шесть таблиц.<br><span>Одна история.</span></h2></div><p>Данные не нужно собирать заново<br>на каждом следующем шаге.</p></div>
         <div class="lp-flow-line" aria-hidden="true"><span></span></div><ol class="lp-flow-steps">
           <li data-reveal><span class="lp-step-number">01</span><span class="lp-step-icon">${icon('recipe')}</span><h3>Сохраните состав</h3><p>Объём, материалы и пропорции для вашей заливки.</p></li>
-          <li data-reveal><span class="lp-step-number">02</span><span class="lp-step-icon">${icon('spark')}</span><h3>Создайте изделие</h3><p>Примените расчёт, добавьте детали, работу и наценку.</p></li>
+          <li data-reveal><span class="lp-step-number">02</span><span class="lp-step-icon">${icon('product')}</span><h3>Создайте изделие</h3><p>Примените расчёт, добавьте детали, работу и наценку.</p></li>
           <li data-reveal><span class="lp-step-number">03</span><span class="lp-step-icon">${icon('box')}</span><h3>Изготовьте</h3><p>Спишите материалы и учтите готовые изделия на складе.</p></li>
           <li data-reveal><span class="lp-step-number">04</span><span class="lp-step-icon">${icon('chart')}</span><h3>Ведите своё дело</h3><p>Продажи, отправки и возвраты в связанных разделах.</p></li>
         </ol>
@@ -108,6 +88,7 @@ export function mountLanding(root) {
   const abort = new AbortController();
   const { signal } = abort;
   const destroyScreens = mountScreenGalleries(root, signal);
+  mountPricingDemo(root, signal);
   const media = matchMedia('(prefers-reduced-motion: reduce)');
   let disposed = false, scene = null, paused = media.matches, assembled = false;
   const motion = root.querySelector('[data-motion-toggle]');
@@ -158,21 +139,6 @@ export function mountLanding(root) {
       event.preventDefault(); selectTab(tabs[next]); tabs[next].focus();
     }, { signal });
   });
-
-  const hours = root.querySelector('#lp-hours'), markup = root.querySelector('#lp-markup');
-  function updatePrice() {
-    const values = calculateDemoPrice(hours.value, markup.value);
-    root.querySelector('[data-hours-value]').textContent = `${qty.format(hours.value)} ч`;
-    root.querySelector('[data-markup-value]').textContent = `${markup.value}%`;
-    hours.setAttribute('aria-valuetext', `${qty.format(hours.value)} ч`);
-    markup.setAttribute('aria-valuetext', `${markup.value}%`);
-    for (const key of ['cost', 'labor', 'extra', 'price']) root.querySelector(`[data-demo-${key}]`).textContent = rub(values[key]);
-    [hours, markup].forEach((input) => input.style.setProperty('--range-progress', `${(input.value - input.min) / (input.max - input.min) * 100}%`));
-    root.querySelectorAll('[data-markup]').forEach((button) => button.setAttribute('aria-pressed', String(button.dataset.markup === markup.value)));
-  }
-  [hours, markup].forEach((input) => input.addEventListener('input', updatePrice, { signal }));
-  root.querySelectorAll('[data-markup]').forEach((button) => button.addEventListener('click', () => { markup.value = button.dataset.markup; updatePrice(); }, { signal }));
-  updatePrice();
 
   root.querySelectorAll('a[href^="#"]:not([href="#login"])').forEach((link) => {
     link.addEventListener('click', (event) => {

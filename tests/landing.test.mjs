@@ -1,14 +1,46 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { calculateDemoPrice, renderLanding } from '../src/landing.js';
+import { renderLanding } from '../src/landing.js';
+import { calculateDemoPrice } from '../src/landing-pricing.js';
 import { landingScreens } from '../src/landing-screens.js';
 
-test('landing example adds materials, work and wear before markup', () => {
-  assert.deepEqual(calculateDemoPrice(1, 120), { materials: 425, tools: 25, labor: 200, cost: 650, extra: 780, price: 1430 });
-  assert.equal(calculateDemoPrice(.25, 20).price, 600);
-  assert.equal(calculateDemoPrice(4, 250).price, 4375);
-  assert.equal(calculateDemoPrice(1, 0).price, 650);
+test('landing price is built from seven transparent cost lines with kopeck precision', () => {
+  const { rows, ...result } = calculateDemoPrice();
+  assert.deepEqual(result, { materials: 425, tools: 37, labor: 200, packaging: 60, minutes: 60, markup: 80, cost: 722, extra: 577.6, price: 1299.6 });
+  assert.equal(rows.length, 7);
+  assert.equal(rows.reduce((sum, row) => sum + row.cost, 0), result.cost);
+  assert.ok(rows.every(row => row.name && row.calculation && row.cost > 0));
+});
+test('work time changes hourly tool wear as well as labor, but not mold wear', () => {
+  const result = calculateDemoPrice({ minutes: 120 });
+  assert.equal(result.labor, 400);
+  assert.equal(result.tools, 49);
+  assert.equal(result.rows.find(row => row.name === 'Молд').cost, 25);
+  assert.equal(result.rows.find(row => row.name === 'Весы').cost, 24);
+  assert.equal(result.price, 1681.2);
+});
+test('packaging is part of the markup base, and zero markup means selling at cost', () => {
+  const result = calculateDemoPrice({ packaging: false });
+  assert.equal(result.cost, 662);
+  assert.equal(result.extra, 529.6);
+  assert.equal(result.price, 1191.6);
+  assert.equal(result.rows.length, 6);
+  assert.equal(calculateDemoPrice({ markup: 0 }).price, 722);
+  assert.equal(calculateDemoPrice({ minutes: 15, markup: 20, packaging: false }).price, 603.6);
+  assert.equal(calculateDemoPrice({ minutes: 240, markup: 250 }).price, 4753);
+});
+test('invalid or extreme demo inputs stay finite and within the demonstrated range', () => {
+  assert.deepEqual(calculateDemoPrice({ minutes: Infinity, markup: NaN }), calculateDemoPrice());
+  assert.deepEqual(calculateDemoPrice({ minutes: -1, markup: -1 }), calculateDemoPrice({ minutes: 15, markup: 0 }));
+  assert.deepEqual(calculateDemoPrice({ minutes: 1e9, markup: 1e9 }), calculateDemoPrice({ minutes: 240, markup: 250 }));
+});
+test('pricing distinguishes the demonstration from unsupported charges and uses a product-card icon', () => {
+  const html = renderLanding();
+  assert.match(html, /Сжатый пример/);
+  assert.match(html, /Комиссии, налоги и доставка в этот пример не включены/);
+  assert.match(html, /<details class="lp-cost-details"/);
+  assert.doesNotMatch(html, /2\.4 6\.6L21|data-markup="|Ваша наценка|НЕ МАГИЯ/);
 });
 
 test('showcase uses ten real, locally hosted screenshots instead of invented UI', () => {
