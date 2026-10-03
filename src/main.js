@@ -1,6 +1,6 @@
 import { PHOTO_BUCKET } from './config.js';
 import { supabase } from './supabaseClient.js';
-import { initResinScene } from './scene.js';
+import { renderLanding, mountLanding } from './landing.js?v=landing-1';
 import { createEquipmentSystem } from './equipment.js?v=instance-control-1';
 import { filterInventory } from './equipment-math.js?v=instance-control-1';
 import { createSelectPopup } from './select-popup.js?v=popup-1';
@@ -13,6 +13,8 @@ const THEME_KEY = 'resin-workshop-theme';
 const FORM_DRAFTS_KEY = 'resin-workshop-form-drafts-v1';
 const PRODUCT_CATEGORIES_KEY = 'resin-workshop-product-categories-v1';
 const LABOR_RATE_PER_HOUR = 200;
+// Temporary product gate. Supabase server-side signup settings are unchanged.
+const REGISTRATION_ENABLED = false;
 const selectPopup = createSelectPopup();
 
 const state = {
@@ -41,6 +43,7 @@ const state = {
   productCategories: [],
   activeProductId: null,
   auth: {
+    page: window.location.hash === '#login' ? 'login' : 'landing',
     registrationOpen: false,
     confirmEmail: '',
   },
@@ -160,7 +163,9 @@ const VIEW_GROUPS = [
   { label: 'Бизнес', items: ['sales', 'calculator'] },
 ];
 
-const sceneController = initResinScene(canvas, state.theme);
+let sceneController = null;
+let backgroundRequest = 0;
+let landingController = null;
 const equipment = createEquipmentSystem({ state, supabase, escapeHtml, formatCurrency, formatQty,
   calculateBatch, loadWorkspace, render, showToast,
   icons: () => window.lucide?.createIcons({ attrs: { 'stroke-width': 1.8 } }),
@@ -187,8 +192,14 @@ applyTheme(state.theme, { persist: false, animate: false });
 boot();
 
 async function boot() {
-  const { data } = await supabase.auth.getSession();
-  setSession(data.session);
+  try {
+    const { data, error } = await supabase.auth.getSession();
+    if (error) throw error;
+    await setSession(data.session);
+  } catch (error) {
+    console.warn('Session check failed:', error);
+    await setSession(null);
+  }
 
   supabase.auth.onAuthStateChange((_event, session) => {
     setSession(session);
@@ -196,13 +207,20 @@ async function boot() {
 }
 
 async function setSession(session) {
+  const wasSignedIn = Boolean(state.user);
   state.session = session;
   state.user = session?.user ?? null;
   state.booted = true;
 
   if (state.user) {
+    if (window.location.hash === '#login') history.replaceState(null, '', window.location.pathname + window.location.search);
     await loadWorkspace();
   } else {
+    if (wasSignedIn) {
+      state.auth.page = 'landing';
+      history.replaceState(null, '', window.location.pathname + window.location.search);
+      window.scrollTo(0, 0);
+    }
     resetWorkspace();
     render();
   }
@@ -372,7 +390,15 @@ function render() {
   if (!state.booted) return;
   closeCustomSelects();
   moldWorkflow.unmount();
-  app.innerHTML = state.user ? renderShell() : renderAuth();
+  landingController?.destroy();
+  landingController = null;
+  const isLanding = !state.user && state.auth.page === 'landing';
+  app.classList.toggle('is-landing', isLanding);
+  document.body.classList.toggle('is-landing', isLanding);
+  document.title = state.user ? 'Формула' : isLanding ? 'Формула — пространство для вашего дела' : 'Вход · Формула';
+  app.innerHTML = state.user ? renderShell() : isLanding ? renderLanding() : renderAuth();
+  updateBackground(isLanding);
+  if (isLanding) landingController = mountLanding(app.querySelector('[data-landing]'));
   restoreFormDrafts();
   requestAnimationFrame(() => {
     enhanceSelects();
@@ -393,6 +419,33 @@ function render() {
     window.lucide?.createIcons({ attrs: { 'stroke-width': 1.8 } });
   });
 }
+
+function updateBackground(isLanding) {
+  const request = ++backgroundRequest;
+  if (isLanding) {
+    sceneController?.destroy();
+    sceneController = null;
+  } else if (!sceneController) {
+    import('./scene.js?v=landing-1').then(({ initResinScene }) => {
+      if (request !== backgroundRequest) return;
+      try { sceneController = initResinScene(canvas, state.theme); }
+      catch { /* Keep the workspace usable on devices without WebGL. */ }
+    }).catch(() => { /* The 3D background is optional; forms must still work offline. */ });
+  }
+}
+
+window.addEventListener('hashchange', () => {
+  if (state.user || !state.booted) return;
+  const page = window.location.hash === '#login' ? 'login' : 'landing';
+  if (page === state.auth.page) return;
+  state.auth.page = page;
+  render();
+  window.scrollTo(0, 0);
+  requestAnimationFrame(() => {
+    const target = page === 'login' ? app.querySelector('input[name="email"]') : app.querySelector('#lp-title');
+    if (target) { if (page === 'landing') target.tabIndex = -1; target.focus({ preventScroll: true }); }
+  });
+});
 
 function readFormDrafts() {
   try {
@@ -545,6 +598,7 @@ function renderBrandMark() {
 
 function renderAuth() {
   return `
+    <a class="auth-landing-back" href="#top"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M20 12H4m6-6-6 6 6 6"/></svg>О Формуле</a>
     <div class="auth-toolbar">
       ${renderThemeToggle()}
     </div>
@@ -557,33 +611,37 @@ function renderAuth() {
             <h1>Формула</h1>
           </div>
         </div>
+        <p>Всё, что нужно вашей мастерской.<br>Всё, что помогает создавать.</p>
       </section>
 
       <section class="auth-panel" aria-label="Вход в приложение">
         <div class="panel-kicker">Вход</div>
-        <h2>Доступ</h2>
+        <h2>С возвращением</h2>
+        <p>Войдите, чтобы продолжить работу в своей мастерской.</p>
         <form class="stack-form" data-action="auth" novalidate>
           <label>
-            Email
+            Электронная почта
             <input name="email" type="email" autocomplete="email" placeholder="name@example.com" required />
           </label>
           <label>
             Пароль
             <input name="password" type="password" autocomplete="current-password" minlength="6" required />
           </label>
+          <p class="auth-inline-error" data-auth-error role="alert" hidden></p>
           <div class="button-row">
             <button class="primary-button" type="submit" name="intent" value="login">
-              Войти
+              <span class="auth-idle-label">Войти в мастерскую</span><span class="auth-busy-label">Входим…</span>
             </button>
-            <button class="ghost-button" data-action="open-registration" type="button">
+            ${REGISTRATION_ENABLED ? `<button class="ghost-button" data-action="open-registration" type="button">
               Регистрация
-            </button>
+            </button>` : ''}
           </div>
         </form>
+        ${REGISTRATION_ENABLED ? '' : '<p class="auth-access-note">Сейчас доступен вход в существующие аккаунты. Регистрация временно закрыта.</p>'}
       </section>
     </main>
-    ${state.auth.registrationOpen ? renderRegistrationPanel() : ''}
-    ${state.auth.confirmEmail ? renderConfirmEmailDialog() : ''}
+    ${REGISTRATION_ENABLED && state.auth.registrationOpen ? renderRegistrationPanel() : ''}
+    ${REGISTRATION_ENABLED && state.auth.confirmEmail ? renderConfirmEmailDialog() : ''}
   `;
 }
 
@@ -3162,6 +3220,7 @@ document.addEventListener('click', async (event) => {
     render();
   }
   if (action === 'open-registration') {
+    if (!REGISTRATION_ENABLED) return;
     state.auth.registrationOpen = true;
     state.auth.confirmEmail = '';
     render();
@@ -3355,7 +3414,7 @@ document.addEventListener('submit', async (event) => {
   } catch (error) {
     console.warn('Form action failed:', error);
     showToast(toUserMessage(error), 'error');
-    const inlineError = form.querySelector('[data-category-delete-error]');
+    const inlineError = form.querySelector('[data-category-delete-error], [data-auth-error]');
     if (inlineError) { inlineError.hidden = false; inlineError.textContent = toUserMessage(error); }
   } finally {
     setBusy(form, false);
@@ -3364,6 +3423,8 @@ document.addEventListener('submit', async (event) => {
 });
 
 async function handleAuth(form) {
+  const inlineError = form.querySelector('[data-auth-error]');
+  if (inlineError) inlineError.hidden = true;
   const formData = new FormData(form);
   const email = String(formData.get('email') ?? '').trim();
   const password = String(formData.get('password') ?? '');
@@ -3378,6 +3439,7 @@ async function handleAuth(form) {
 }
 
 async function handleSignup(form) {
+  if (!REGISTRATION_ENABLED) throw new Error('Регистрация временно недоступна');
   const formData = new FormData(form);
   const email = String(formData.get('email') ?? '').trim();
   const password = String(formData.get('password') ?? '');

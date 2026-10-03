@@ -134,10 +134,11 @@ export function initResinScene(canvas, initialTheme = 'dark') {
   }
 
   const pointer = { x: 0, y: 0 };
-  window.addEventListener('pointermove', (event) => {
+  const onPointerMove = (event) => {
     pointer.x = (event.clientX / window.innerWidth - 0.5) * 2;
     pointer.y = (event.clientY / window.innerHeight - 0.5) * 2;
-  });
+  };
+  window.addEventListener('pointermove', onPointerMove);
 
   function resize() {
     const dpr = Math.min(window.devicePixelRatio || 1, 2);
@@ -150,6 +151,7 @@ export function initResinScene(canvas, initialTheme = 'dark') {
   window.addEventListener('resize', resize);
 
   const clock = new THREE.Clock();
+  let frame = 0;
   function animate() {
     const t = clock.getElapsedTime();
 
@@ -189,9 +191,21 @@ export function initResinScene(canvas, initialTheme = 'dark') {
     });
 
     renderer.render(scene, camera);
-    requestAnimationFrame(animate);
+    frame = requestAnimationFrame(animate);
   }
   animate();
 
-  return { setTheme };
+  return { setTheme, destroy() {
+    cancelAnimationFrame(frame);
+    window.removeEventListener('pointermove', onPointerMove);
+    window.removeEventListener('resize', resize);
+    const geometries = new Set(), materials = new Set();
+    scene.traverse((object) => {
+      if (object.geometry) geometries.add(object.geometry);
+      if (object.material) materials.add(object.material);
+    });
+    geometries.forEach((geometry) => geometry.dispose());
+    materials.forEach((material) => material.dispose());
+    renderer.dispose();
+  } };
 }

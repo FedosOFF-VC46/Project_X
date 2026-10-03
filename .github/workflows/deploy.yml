@@ -37,6 +37,8 @@ jobs:
           node --check src/mold-workflow.js
           node --check src/mold-motion.js
           node --check src/mold-math.js
+          node --check src/landing.js
+          node --check src/landing-scene.js
           node --test tests/*.test.mjs
 
       - name: Setup Pages
