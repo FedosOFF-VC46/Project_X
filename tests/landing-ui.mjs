@@ -1,6 +1,7 @@
 import { createRequire } from 'node:module';
 import assert from 'node:assert/strict';
 import { mkdir } from 'node:fs/promises';
+import { landingScreens } from '../src/landing-screens.js';
 
 const require = createRequire(import.meta.url);
 const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
@@ -71,6 +72,47 @@ try {
     }
   }
   await page.setViewportSize({ width: 1440, height: 1000 });
+  for (const [section, screens] of Object.entries(landingScreens)) {
+    await page.locator(`[data-demo-tab="${section}"]`).click();
+    const gallery = page.locator(`[data-screen-gallery="${section}"]`);
+    for (const [index, screen] of screens.entries()) {
+      await gallery.locator(`[data-screen-select="${index}"]`).click();
+      await gallery.locator('[data-screen-image]').evaluate(image => image.decode());
+      assert.equal(await gallery.locator('[data-screen-image]').getAttribute('src'), `./assets/screens/${screen.id}.webp`);
+      assert.deepEqual(await gallery.locator('[data-screen-image]').evaluate(image => [image.naturalWidth, image.naturalHeight]), [screen.width, screen.height]);
+      await gallery.locator('[data-screen-open]').click();
+      assert.equal(await page.locator('[data-screen-dialog]').evaluate(dialog => dialog.open), true);
+      assert.equal(await page.locator('#lp-screen-title').textContent(), screen.label);
+      await page.locator('[data-screen-full]').evaluate(image => image.decode());
+      await fits();
+      await page.locator('[data-screen-size]').click();
+      assert.equal(await page.locator('[data-screen-size]').getAttribute('aria-pressed'), 'true');
+      await fits();
+      await page.keyboard.press('Escape');
+      await page.locator('body.lp-screen-open').waitFor({ state: 'detached' });
+      assert.equal(await page.locator('[data-screen-dialog]').evaluate(dialog => dialog.open), false);
+      assert.equal(await gallery.locator('[data-screen-open]').evaluate(button => button === document.activeElement), true);
+      assert.equal(await page.locator('body.lp-screen-open').count(), 0);
+    }
+    await gallery.locator('[data-screen-select="0"]').click();
+    await page.locator('.lp-demo-tabs').scrollIntoViewIfNeeded();
+    await page.locator('.lp-demo-stage').screenshot({ path: `${output}/showcase-${section}.png` });
+  }
+  // Zoom is scrollable inside its own dialog, not the mobile page.
+  await page.setViewportSize({ width: 320, height: 760 });
+  await page.locator('[data-demo-tab="recipe"]').click();
+  await page.locator('#lp-panel-recipe [data-screen-open]').click();
+  await fits();
+  await page.locator('[data-screen-size]').click();
+  assert.ok(await page.locator('[data-screen-scroll]').evaluate(el => el.scrollWidth > el.clientWidth));
+  await page.locator('[data-screen-scroll]').evaluate(el => el.scrollTo(120, 200));
+  await fits();
+  await page.screenshot({ path: `${output}/screen-zoom-mobile.png` });
+  await page.locator('[data-screen-close]').click();
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await page.locator('#lp-panel-recipe [data-screen-open]').click();
+  await page.mouse.click(2, 2);
+  assert.equal(await page.locator('[data-screen-dialog]').evaluate(dialog => dialog.open), false);
   await page.locator('[data-demo-tab="recipe"]').focus();
   await page.keyboard.press('ArrowRight');
   assert.equal(await page.locator('[data-demo-tab="product"]').getAttribute('aria-selected'), 'true');

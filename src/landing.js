@@ -1,3 +1,5 @@
+import { renderScreenGallery, renderScreenDialog, mountScreenGalleries } from './landing-screens.js?v=screens-1';
+
 const money = new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 0 });
 const qty = new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 2 });
 const rub = (value) => `${money.format(value)} ₽`;
@@ -29,34 +31,6 @@ const demos = [
   { id: 'stock', name: 'Склад', icon: 'box', caption: '03 / От изготовления к порядку', title: 'Всё на своём месте.\nДаже мелочи.', text: 'Смола, пигменты, фурнитура, готовые изделия и инструменты. Видно, что осталось, чего не хватает и какой ресурс ещё есть у молда.' },
   { id: 'business', name: 'Бизнес', icon: 'chart', caption: '04 / От мастерской к клиенту', title: 'Отправлено\nне значит продано.', text: 'Продажи отдельно, логистика отдельно. Учитывайте отправки и возвраты, не смешивая движение изделий с полученной выручкой.' },
 ];
-
-function demoRows(rows) {
-  return rows.map(([name, note, value]) => `<div class="lp-demo-row"><span><b>${name}</b><small>${note}</small></span><strong>${value}</strong></div>`).join('');
-}
-
-function renderDemoContent(id) {
-  if (id === 'recipe') return `
-    <div class="lp-preview-heading"><span class="lp-demo-icon">${icon('recipe')}</span><div><small>Сохранённый расчёт</small><h4>Подстаканник «Волна»</h4></div><span class="lp-status">${icon('check')} Готов</span></div>
-    <div class="lp-recipe-visual"><div class="lp-mini-coaster" aria-hidden="true"></div><div><small>Объём основной заливки</small><strong>120 <span>мл</span></strong><span>Основа для следующего изделия</span></div></div>
-    <div class="lp-demo-rows">${demoRows([['Прозрачная смола', '140 г × 2,50 ₽', '350 ₽'], ['Мятный пигмент', '2 мл × 30 ₽', '60 ₽'], ['Декоративная поталь', '1 порция × 15 ₽', '15 ₽']])}</div>
-    <div class="lp-demo-total"><span>Стоимость материалов</span><strong>425 ₽</strong></div>`;
-  if (id === 'product') return `
-    <div class="lp-preview-heading"><span class="lp-demo-icon">${icon('spark')}</span><div><small>Карта изделия</small><h4>Подстаканник «Волна»</h4></div></div>
-    <div class="lp-product-preview"><div class="lp-mini-coaster" aria-hidden="true"></div><div><span class="lp-status">Подстаканники</span><h4>Маленькая вещь.<br>Большая работа.</h4></div></div>
-    <div class="lp-demo-rows">${demoRows([['Материалы', 'Из сохранённого расчёта', '425 ₽'], ['Работа', '1 час × 200 ₽', '200 ₽'], ['Износ инструмента', 'Часть стоимости молда', '25 ₽'], ['Наценка', '120% к себестоимости 650 ₽', '780 ₽']])}</div>
-    <div class="lp-demo-total"><span>Цена изделия</span><strong>1 430 ₽</strong></div>`;
-  if (id === 'stock') return `
-    <div class="lp-preview-heading"><span class="lp-demo-icon">${icon('box')}</span><div><small>Склад мастерской</small><h4>Ничего не потеряется</h4></div></div>
-    <div class="lp-demo-rows">${demoRows([['Прозрачная смола', 'Материалы · 2,50 ₽ / г', '4 500 г'], ['Мятный пигмент', 'Материалы · 30 ₽ / мл', '18 мл'], ['Подстаканник «Волна»', 'Готовая продукция', '3 шт']])}</div>
-    <div class="lp-tool"><div><b>Молд «Волна» · №1</b><span>Ресурс инструмента</span></div><strong>8 / 10</strong><div class="lp-tool-track"><span></span></div><small>Осталось 8 заливок. Износ учитывается при изготовлении.</small></div>
-    <div class="lp-demo-note">Материалы и готовые изделия учитываются отдельно.</div>`;
-  return `
-    <div class="lp-preview-heading"><span class="lp-demo-icon">${icon('chart')}</span><div><small>Продажи и логистика</small><h4>У каждой вещи свой путь</h4></div></div>
-    <div class="lp-shipment"><div class="lp-mini-coaster" aria-hidden="true"></div><div><small>Подстаканник «Волна»</small><h4>2 изделия</h4><span class="lp-status">Отправлено</span></div></div>
-    <ol class="lp-delivery"><li>${icon('check')} На складе</li><li>${icon('check')} Отправлено</li><li>Продажа</li></ol>
-    <div class="lp-demo-rows">${demoRows([['Отправлено клиенту', 'Движение в разделе «Логистика»', '2 шт'], ['Выручка по отправке', 'Продажа ещё не проведена', '0 ₽']])}</div>
-    <div class="lp-demo-note">Вернулось? Изделие можно вернуть на склад.</div>`;
-}
 
 export function renderLanding() {
   return `<div class="landing" data-landing>
@@ -92,11 +66,11 @@ export function renderLanding() {
       </section>
 
       <section class="lp-showcase lp-container" id="possibilities" aria-labelledby="lp-features-title">
-        <div class="lp-section-head" data-reveal><div><p class="lp-overline">Внутри Формулы</p><h2 id="lp-features-title">Вся мастерская.<br><span>В одном ритме.</span></h2></div><p>Не просто список функций.<br>Посмотрите, как они работают вместе.</p></div>
+        <div class="lp-section-head" data-reveal><div><p class="lp-overline">Внутри Формулы</p><h2 id="lp-features-title">Вся мастерская.<br><span>В одном ритме.</span></h2></div><p>Не макеты. Настоящие экраны приложения.<br>Переключайте разделы и рассматривайте детали.</p></div>
         <div class="lp-demo-tabs" role="tablist" aria-label="Разделы приложения" data-reveal>${demos.map((item, i) => `<button type="button" role="tab" id="lp-tab-${item.id}" aria-controls="lp-panel-${item.id}" aria-selected="${i === 0}" tabindex="${i === 0 ? 0 : -1}" data-demo-tab="${item.id}">${icon(item.icon)}<span>${item.name}</span><small>0${i + 1}</small></button>`).join('')}</div>
         <div class="lp-demo-stage" data-reveal>${demos.map((item, i) => `<div class="lp-demo-panel" id="lp-panel-${item.id}" role="tabpanel" aria-labelledby="lp-tab-${item.id}" tabindex="0" ${i ? 'hidden' : ''}>
-          <div class="lp-demo-explainer"><span class="lp-overline">${item.caption}</span><h3>${item.title.replace('\n', '<br>')}</h3><p>${item.text}</p><a class="lp-text-link" href="#login">В своё пространство ${icon('arrow')}</a><span class="lp-demo-watermark" aria-hidden="true">0${i + 1}</span></div>
-          <div class="lp-app-preview"><div class="lp-window-bar"><span><i></i><i></i><i></i></span><span>Формула / ${item.name}</span><span class="lp-window-dot"></span></div><div class="lp-preview-body">${renderDemoContent(item.id)}</div><p class="lp-demo-disclaimer">Интерактивный обзор · демонстрационные данные</p></div>
+          <div class="lp-demo-explainer"><div><span class="lp-overline">${item.caption}</span><h3>${item.title.replace('\n', '<br>')}</h3></div><div><p>${item.text}</p><a class="lp-text-link" href="#login">В своё пространство ${icon('arrow')}</a></div></div>
+          ${renderScreenGallery(item.id)}
         </div>`).join('')}</div>
       </section>
 
@@ -126,12 +100,14 @@ export function renderLanding() {
       <section class="lp-finale lp-container" aria-labelledby="lp-finale-title" data-reveal><div class="lp-finale-orbits" aria-hidden="true"><i></i><i></i><i></i></div><img src="./assets/logo-dark.svg" width="64" height="64" alt=""/><p class="lp-overline">Больше пространства для творчества</p><h2 id="lp-finale-title">Ваш талант.<br>Ваша <span>Формула.</span></h2><p>Когда всё учтено, можно просто создавать.</p><a class="lp-button" href="#login">Войти в своё пространство ${icon('arrow')}</a><small>Вход для существующих пользователей. Регистрация пока закрыта.</small></section>
     </main>
     <footer class="lp-footer lp-container"><a class="lp-brand" href="#top"><img src="./assets/logo-dark.svg" width="32" height="32" alt=""/><span>Формула.</span></a><p>Состав. Порядок. Ценность.</p><a href="#login">Вход в кабинет ${icon('arrow')}</a></footer>
+    ${renderScreenDialog()}
   </div>`;
 }
 
 export function mountLanding(root) {
   const abort = new AbortController();
   const { signal } = abort;
+  const destroyScreens = mountScreenGalleries(root, signal);
   const media = matchMedia('(prefers-reduced-motion: reduce)');
   let disposed = false, scene = null, paused = media.matches, assembled = false;
   const motion = root.querySelector('[data-motion-toggle]');
@@ -214,5 +190,5 @@ export function mountLanding(root) {
     scene = createLandingScene(root.querySelector('[data-landing-canvas]'), paused || media.matches);
     scene.setAssembled(assembled);
   }).catch(() => { root.querySelector('[data-sculpture]').dataset.renderer = 'fallback'; });
-  return { destroy() { disposed = true; abort.abort(); observer.disconnect(); scene?.destroy(); } };
+  return { destroy() { disposed = true; destroyScreens(); abort.abort(); observer.disconnect(); scene?.destroy(); } };
 }
